@@ -10,6 +10,7 @@ import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
 import android.util.AttributeSet
 import android.view.View
+import android.widget.TextView
 import androidx.appcompat.widget.AppCompatTextView
 
 /**
@@ -25,7 +26,7 @@ class GuidanceTextView @JvmOverloads constructor(
 
     private var applyingGuide = false
 
-    override fun setText(text: CharSequence?, type: BufferType?) {
+    override fun setText(text: CharSequence?, type: TextView.BufferType?) {
         if (applyingGuide || text == null || isInEditMode) {
             super.setText(text, type)
             return
@@ -99,12 +100,12 @@ class GuidanceTextView @JvmOverloads constructor(
 
         if (meaningful.isNotEmpty()) return meaningful.joinToString(" • ")
 
-        val frozen = rootView.findViewById<View?>(R.id.frozenImage)?.visibility == View.VISIBLE
+        val frozen = rootView.findViewById<View>(R.id.frozenImage)?.visibility == View.VISIBLE
         return if (frozen) "Frozen image" else "Camera ready"
     }
 
     private fun currentGuide(raw: String): String {
-        val frozenImage = rootView.findViewById<View?>(R.id.frozenImage)
+        val frozenImage = rootView.findViewById<View>(R.id.frozenImage)
         val frozen = frozenImage?.visibility == View.VISIBLE
 
         if (!frozen) {
@@ -112,7 +113,7 @@ class GuidanceTextView @JvmOverloads constructor(
         }
 
         val zoomed = (frozenImage?.scaleX ?: 1f) > 1.01f
-        val undoButton = rootView.findViewById<View?>(R.id.undoButton)
+        val undoButton = rootView.findViewById<View>(R.id.undoButton)
         val canUndo = undoButton?.visibility == View.VISIBLE && undoButton.isEnabled
         val maxReached = raw.contains("max reached", ignoreCase = true) ||
             raw.contains("Maximum", ignoreCase = true)
