@@ -114,22 +114,30 @@ class GuidanceTextView @JvmOverloads constructor(
 
         val zoomed = (frozenImage?.scaleX ?: 1f) > 1.01f
         val undoButton = rootView.findViewById<View>(R.id.undoButton)
+        val readTextButton = rootView.findViewById<View>(R.id.readTextButton)
         val canUndo = undoButton?.visibility == View.VISIBLE && undoButton.isEnabled
+        val canRead = readTextButton?.isEnabled == true
         val maxReached = raw.contains("max reached", ignoreCase = true) ||
             raw.contains("Maximum", ignoreCase = true)
 
         return when {
-            zoomed && maxReached && canUndo ->
-                "Slide ↑/↓  Zoom   •   Tap  Overview   •   Undo  Back one pass"
+            zoomed && maxReached && canUndo && canRead ->
+                "Slide ↑/↓  Zoom   •   Tap  Overview   •   Read Text  Visible area   •   Undo  Back"
 
-            zoomed && canUndo ->
-                "Slide ↑/↓  Zoom   •   Tap  Overview   •   Double-tap  Enhance   •   Undo  Back"
+            zoomed && canUndo && canRead ->
+                "Tap  Overview   •   Double-tap  Enhance   •   Read Text  Visible area   •   Undo  Back"
+
+            zoomed && canRead ->
+                "Slide ↑/↓  Zoom   •   Tap  Overview   •   Double-tap  Enhance   •   Read Text  Visible area"
+
+            !zoomed && canRead ->
+                "Slide ↑/↓  Zoom   •   Read Text  Full image"
 
             zoomed ->
                 "Slide ↑/↓  Zoom   •   Tap  Overview   •   Double-tap  Enhance"
 
             else ->
-                "Slide ↑/↓  Zoom   •   Zoom in for Overview + Double-tap Enhance"
+                "Slide ↑/↓  Zoom   •   OCR available after enhancement"
         }
     }
 }
