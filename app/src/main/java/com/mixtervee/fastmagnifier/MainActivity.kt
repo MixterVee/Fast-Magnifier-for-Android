@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.view.GestureDetector
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
@@ -32,6 +33,7 @@ import kotlin.math.max
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
+    private lateinit var frozenTapDetector: GestureDetector
     private var camera: Camera? = null
     private var original: Bitmap? = null
     private var enhanced: Bitmap? = null
@@ -48,7 +50,6 @@ class MainActivity : AppCompatActivity() {
     private var touchSlop = 12f
     private var enhanceRequestId = 0
 
-    private var frozenTouchDownX = 0f
     private var frozenTouchDownY = 0f
     private var frozenStartScale = 1f
     private var frozenScale = 1f
@@ -76,6 +77,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         touchSlop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
 
+        setupFrozenTapDetector()
         setupFrozenImageGestures()
 
         binding.textMode.setOnClickListener { selectMode(Mode.TEXT) }
@@ -99,11 +101,31 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupFrozenTapDetector() {
+        frozenTapDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean = true
+
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                handleFrozenSingleTap()
+                return true
+            }
+
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                if (binding.frozenImage.visibility == View.VISIBLE && frozenScale > 1.01f) {
+                    enhanceVisibleArea()
+                    return true
+                }
+                return false
+            }
+        })
+    }
+
     private fun setupFrozenImageGestures() {
         binding.frozenImage.setOnTouchListener { _, event ->
+            frozenTapDetector.onTouchEvent(event)
+
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    frozenTouchDownX = event.x
                     frozenTouchDownY = event.y
                     frozenStartScale = frozenScale
                     frozenZoomGesture = false
@@ -122,7 +144,7 @@ class MainActivity : AppCompatActivity() {
                             .coerceIn(1f, 8f)
                         applyFrozenScale()
                         binding.statusText.text = if (frozenScale > 1.01f) {
-                            "Frozen zoom ${formatZoom(frozenScale)}× • overview fades automatically"
+                            "Frozen zoom ${formatZoom(frozenScale)}× • double-tap to enhance area"
                         } else {
                             "Frozen 1.0× • slide up to zoom"
                         }
@@ -130,28 +152,11 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 MotionEvent.ACTION_UP -> {
-                    val movement = hypot(
-                        (event.x - frozenTouchDownX).toDouble(),
-                        (event.y - frozenTouchDownY).toDouble()
-                    )
-
                     if (frozenZoomGesture) {
                         binding.statusText.text = if (frozenScale > 1.01f) {
-                            "Frozen zoom ${formatZoom(frozenScale)}× • tap image for overview"
+                            "Frozen zoom ${formatZoom(frozenScale)}× • tap overview • double-tap enhance"
                         } else {
                             "Slide up/down to zoom • Save keeps full image"
-                        }
-                    } else if (movement <= touchSlop * 1.5) {
-                        if (frozenScale > 1.01f) {
-                            val shown = binding.navigatorView.toggleVisibility()
-                            binding.statusText.text = if (shown) {
-                                "Overview shown • drag the cyan box to move"
-                            } else {
-                                "Overview hidden • tap image to show"
-                            }
-                        } else {
-                            binding.navigatorView.hideImmediately()
-                            binding.statusText.text = "Slide up/down to zoom • Save keeps full image"
                         }
                     }
                     frozenZoomGesture = false
@@ -162,6 +167,83 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             true
+        }
+    }
+
+    private fun handleFrozenSingleTap() {
+        if (binding.frozenImage.visibility != View.VISIBLE) return
+
+        if (frozenScale > 1.01f) {
+            val shown = binding.navigatorView.toggleVisibility()
+            binding.statusText.text = if (shown) {
+                "Overview shown • drag cyan box • double-tap image to enhance"
+            } else {
+                "Overview hidden • tap to show • double-tap to enhance"
+            }
+        } else {
+            binding.navigatorView.hideImmediately()
+            binding.statusText.text = "Slide up/down to zoom • Save keeps full image"
+        }
+    }
+
+    private fun enhanceVisibleArea() {
+        if (binding.frozenImage.visibility != View.VISIBLE || frozenScale <= 1.01f) return
+
+        val source = if (showingEnhanced) enhanced ?: original else original
+        if (source == null) return
+
+        val visible = binding.frozenImage.visibleBitmapRectNormalized()
+        val left = (visible.left * source.width).toInt().coerceIn(0, source.width - 1)
+        val top = (visible.top * source.height).toInt().coerceIn(0, source.height - 1)
+        val right = (visible.right * source.width).toInt().coerceIn(left + 1, source.width)
+        val bottom = (visible.bottom * source.height).toInt().coerceIn(top + 1, source.height)
+        val cropWidth = right - left
+        val cropHeight = bottom - top
+
+        if (cropWidth < 8 || cropHeight < 8) {
+            binding.statusText.text = "Zoomed area is too small to enhance"
+            return
+        }
+
+        val crop = Bitmap.createBitmap(source, left, top, cropWidth, cropHeight)
+        val selectedMode = mode
+        val requestId = ++enhanceRequestId
+        binding.navigatorView.hideImmediately()
+        binding.frozenImage.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+        binding.toggleButton.isEnabled = false
+        binding.saveButton.isEnabled = false
+        binding.statusText.text = "Enhancing visible area…"
+        val start = System.nanoTime()
+
+        worker.execute {
+            try {
+                val focused = fastEnhance(crop, selectedMode, 1.45f)
+                val out = source.copy(Bitmap.Config.ARGB_8888, true)
+                val pixels = IntArray(cropWidth * cropHeight)
+                focused.getPixels(pixels, 0, cropWidth, 0, 0, cropWidth, cropHeight)
+                out.setPixels(pixels, 0, cropWidth, left, top, cropWidth, cropHeight)
+                val ms = (System.nanoTime() - start) / 1_000_000
+
+                runOnUiThread {
+                    if (requestId != enhanceRequestId || binding.frozenImage.visibility != View.VISIBLE) return@runOnUiThread
+                    enhanced = out
+                    showingEnhanced = true
+                    binding.frozenImage.setImageBitmap(out)
+                    binding.frozenImage.clampPan()
+                    binding.toggleButton.isEnabled = true
+                    binding.toggleButton.text = "Original"
+                    binding.saveButton.isEnabled = true
+                    binding.statusText.text =
+                        "Visible area enhanced in ${ms} ms • double-tap again for another pass"
+                }
+            } catch (t: Throwable) {
+                runOnUiThread {
+                    if (requestId != enhanceRequestId) return@runOnUiThread
+                    binding.toggleButton.isEnabled = enhanced != null
+                    binding.saveButton.isEnabled = true
+                    binding.statusText.text = "Area enhance error: ${t.javaClass.simpleName}"
+                }
+            }
         }
     }
 
@@ -490,7 +572,7 @@ class MainActivity : AppCompatActivity() {
                     binding.toggleButton.text = "Original"
                     binding.saveButton.isEnabled = true
                     binding.statusText.text =
-                        "Enhanced in ${ms} ms • Slide zoom • tap image for overview"
+                        "Enhanced in ${ms} ms • Slide zoom • double-tap zoomed area to enhance"
                 }
             } catch (t: Throwable) {
                 runOnUiThread {
@@ -513,9 +595,9 @@ class MainActivity : AppCompatActivity() {
         binding.frozenImage.clampPan()
         binding.toggleButton.text = if (showingEnhanced) "Original" else "Enhanced"
         binding.statusText.text = if (showingEnhanced) {
-            "Enhanced • Slide zoom • tap image for overview • Save available"
+            "Enhanced • Slide zoom • double-tap area to enhance • Save available"
         } else {
-            "Original • Slide zoom • tap image for overview • Save available"
+            "Original • Slide zoom • double-tap area to enhance • Save available"
         }
     }
 
@@ -584,7 +666,7 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun fastEnhance(src: Bitmap, mode: Mode): Bitmap {
+    private fun fastEnhance(src: Bitmap, mode: Mode, boost: Float = 1f): Bitmap {
         val width = src.width
         val height = src.height
         val count = width * height
@@ -593,26 +675,32 @@ class MainActivity : AppCompatActivity() {
         val output = IntArray(count)
         src.getPixels(input, 0, width, 0, 0, width, height)
 
-        val contrast = when (mode) {
+        val baseContrast = when (mode) {
             Mode.TEXT -> 1.34f
             Mode.DETAIL -> 1.16f
             Mode.DISTANCE -> 1.22f
         }
-        val saturation = when (mode) {
+        val baseSaturation = when (mode) {
             Mode.TEXT -> 0.45f
             Mode.DETAIL -> 1.03f
             Mode.DISTANCE -> 0.95f
         }
-        val brightness = when (mode) {
+        val baseBrightness = when (mode) {
             Mode.TEXT -> 7f
             Mode.DETAIL -> 2f
             Mode.DISTANCE -> 4f
         }
-        val sharpenAmount = when (mode) {
+        val baseSharpenAmount = when (mode) {
             Mode.TEXT -> 0.55f
             Mode.DETAIL -> 0.38f
             Mode.DISTANCE -> 0.46f
         }
+
+        val tonalBoost = boost.coerceIn(1f, 1.35f)
+        val contrast = 1f + (baseContrast - 1f) * boost
+        val saturation = 1f + (baseSaturation - 1f) * tonalBoost
+        val brightness = baseBrightness * tonalBoost
+        val sharpenAmount = baseSharpenAmount * boost
 
         for (i in 0 until count) {
             val p = input[i]
