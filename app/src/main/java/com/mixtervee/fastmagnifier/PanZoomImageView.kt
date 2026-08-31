@@ -180,6 +180,6 @@ class PanZoomImageView @JvmOverloads constructor(
     }
 
     private fun notifyNavigator() {
-        rootView.findViewById<FrozenNavigatorView?>(R.id.navigatorView)?.invalidate()
+        rootView.findViewById<FrozenNavigatorView>(R.id.navigatorView)?.invalidate()
     }
 }
