@@ -12,6 +12,10 @@ class PanZoomImageView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : AppCompatImageView(context, attrs, defStyleAttr) {
 
+    private companion object {
+        const val PAN_SENSITIVITY = 2.5f
+    }
+
     private var twoFingerGestureActive = false
     private var suppressUntilAllUp = false
     private var lastCenterX = 0f
@@ -33,8 +37,8 @@ class PanZoomImageView @JvmOverloads constructor(
                 if (twoFingerGestureActive && event.pointerCount >= 2) {
                     val centerX = pointerCenterX(event)
                     val centerY = pointerCenterY(event)
-                    val dx = centerX - lastCenterX
-                    val dy = centerY - lastCenterY
+                    val dx = (centerX - lastCenterX) * PAN_SENSITIVITY
+                    val dy = (centerY - lastCenterY) * PAN_SENSITIVITY
 
                     if (scaleX > 1.01f || scaleY > 1.01f) {
                         translationX = (translationX + dx).coerceIn(-maxPanX(), maxPanX())
