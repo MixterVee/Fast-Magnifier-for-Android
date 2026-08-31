@@ -53,6 +53,8 @@ class MainActivity : AppCompatActivity() {
     private var frozenScale = 1f
     private var frozenZoomGesture = false
 
+    private var torchEnabled = false
+
     enum class Mode { TEXT, DETAIL, DISTANCE }
 
     private val longPressRunnable = Runnable {
@@ -83,6 +85,10 @@ class MainActivity : AppCompatActivity() {
         }
         binding.toggleButton.setOnClickListener { toggleOriginalEnhanced() }
         binding.saveButton.setOnClickListener { saveCurrentPicture() }
+        binding.lightButton.setOnClickListener { toggleTorch() }
+        binding.exposureSlider.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) setExposureCompensation(value.toInt())
+        }
         binding.previewView.setOnTouchListener { _, event -> handleLiveTouch(event) }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
@@ -119,9 +125,11 @@ class MainActivity : AppCompatActivity() {
 
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (frozenZoomGesture) {
-                        binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}× • slide up/down"
+                        binding.statusText.text =
+                            "Frozen zoom ${formatZoom(frozenScale)}× • 2-finger pan"
                     } else {
-                        binding.statusText.text = "Slide up/down to zoom • Save keeps full image"
+                        binding.statusText.text =
+                            "Slide up/down to zoom • 2-finger pan • Save keeps full image"
                     }
                     frozenZoomGesture = false
                 }
@@ -156,8 +164,85 @@ class MainActivity : AppCompatActivity() {
             }
             provider.unbindAll()
             camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview)
+            setupCameraControls()
             binding.statusText.text = liveHint()
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun setupCameraControls() {
+        val c = camera ?: return
+
+        val hasLight = c.cameraInfo.hasFlashUnit()
+        binding.lightButton.isEnabled = hasLight
+        binding.lightButton.text = when {
+            !hasLight -> "No Light"
+            torchEnabled -> "Light On"
+            else -> "Light"
+        }
+        if (hasLight && torchEnabled) {
+            c.cameraControl.enableTorch(true)
+        }
+
+        val exposureState = c.cameraInfo.exposureState
+        val range = exposureState.exposureCompensationRange
+        if (exposureState.isExposureCompensationSupported && range.lower < range.upper) {
+            binding.exposureSlider.isEnabled = binding.frozenImage.visibility != View.VISIBLE
+            binding.exposureSlider.valueFrom = range.lower.toFloat()
+            binding.exposureSlider.valueTo = range.upper.toFloat()
+            binding.exposureSlider.stepSize = 1f
+            val current = exposureState.exposureCompensationIndex.coerceIn(range.lower, range.upper)
+            binding.exposureSlider.value = current.toFloat()
+            updateExposureLabel(current)
+        } else {
+            binding.exposureSlider.isEnabled = false
+            binding.exposureText.text = "EV Auto"
+        }
+    }
+
+    private fun toggleTorch() {
+        val c = camera ?: return
+        if (!c.cameraInfo.hasFlashUnit()) {
+            binding.lightButton.isEnabled = false
+            binding.lightButton.text = "No Light"
+            return
+        }
+
+        val target = !torchEnabled
+        binding.lightButton.isEnabled = false
+        val future = c.cameraControl.enableTorch(target)
+        future.addListener({
+            try {
+                future.get()
+                torchEnabled = target
+                binding.lightButton.text = if (torchEnabled) "Light On" else "Light"
+                binding.statusText.text = if (binding.frozenImage.visibility == View.VISIBLE) {
+                    if (torchEnabled) "Light on • Frozen" else "Light off • Frozen"
+                } else {
+                    if (torchEnabled) "Light on • ${liveHint()}" else "Light off • ${liveHint()}"
+                }
+            } catch (_: Throwable) {
+                binding.statusText.text = "Could not change camera light"
+            } finally {
+                binding.lightButton.isEnabled = true
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun setExposureCompensation(requestedIndex: Int) {
+        val c = camera ?: return
+        val state = c.cameraInfo.exposureState
+        if (!state.isExposureCompensationSupported) return
+
+        val range = state.exposureCompensationRange
+        val index = requestedIndex.coerceIn(range.lower, range.upper)
+        updateExposureLabel(index)
+        c.cameraControl.setExposureCompensationIndex(index)
+    }
+
+    private fun updateExposureLabel(index: Int) {
+        val step = camera?.cameraInfo?.exposureState?.exposureCompensationStep?.toFloat() ?: 0f
+        val ev = index * step
+        binding.exposureText.text = String.format(Locale.US, "EV %+.1f", ev)
     }
 
     private fun liveHint(): String = "Slide up/down to zoom • Tap focus • Hold to freeze"
@@ -321,6 +406,7 @@ class MainActivity : AppCompatActivity() {
         binding.toggleButton.isEnabled = false
         binding.toggleButton.text = "Original"
         binding.saveButton.isEnabled = true
+        binding.exposureSlider.isEnabled = false
         binding.statusText.text = "Frozen • Enhancing…"
         enhanceFrozen()
     }
@@ -338,6 +424,7 @@ class MainActivity : AppCompatActivity() {
         binding.toggleButton.isEnabled = false
         binding.toggleButton.text = "Original"
         binding.saveButton.isEnabled = false
+        setupCameraControls()
         binding.statusText.text = liveHint()
     }
 
@@ -360,7 +447,8 @@ class MainActivity : AppCompatActivity() {
                     binding.toggleButton.isEnabled = true
                     binding.toggleButton.text = "Original"
                     binding.saveButton.isEnabled = true
-                    binding.statusText.text = "Enhanced in ${ms} ms • Slide to zoom"
+                    binding.statusText.text =
+                        "Enhanced in ${ms} ms • Slide zoom • 2-finger pan"
                 }
             } catch (t: Throwable) {
                 runOnUiThread {
@@ -381,9 +469,9 @@ class MainActivity : AppCompatActivity() {
         binding.frozenImage.setImageBitmap(if (showingEnhanced) e else original)
         binding.toggleButton.text = if (showingEnhanced) "Original" else "Enhanced"
         binding.statusText.text = if (showingEnhanced) {
-            "Enhanced • Slide to zoom • Save available"
+            "Enhanced • Slide zoom • 2-finger pan • Save available"
         } else {
-            "Original • Slide to zoom • Save available"
+            "Original • Slide zoom • 2-finger pan • Save available"
         }
     }
 
@@ -514,9 +602,12 @@ class MainActivity : AppCompatActivity() {
                 val cg = (c shr 8) and 0xff
                 val cb = c and 0xff
 
-                val lapR = 4 * cr - ((l shr 16) and 0xff) - ((r shr 16) and 0xff) - ((u shr 16) and 0xff) - ((d shr 16) and 0xff)
-                val lapG = 4 * cg - ((l shr 8) and 0xff) - ((r shr 8) and 0xff) - ((u shr 8) and 0xff) - ((d shr 8) and 0xff)
-                val lapB = 4 * cb - (l and 0xff) - (r and 0xff) - (u and 0xff) - (d and 0xff)
+                val lapR = 4 * cr - ((l shr 16) and 0xff) - ((r shr 16) and 0xff) -
+                    ((u shr 16) and 0xff) - ((d shr 16) and 0xff)
+                val lapG = 4 * cg - ((l shr 8) and 0xff) - ((r shr 8) and 0xff) -
+                    ((u shr 8) and 0xff) - ((d shr 8) and 0xff)
+                val lapB = 4 * cb - (l and 0xff) - (r and 0xff) -
+                    (u and 0xff) - (d and 0xff)
 
                 val nr = (cr + sharpenAmount * lapR).toInt().coerceIn(0, 255)
                 val ng = (cg + sharpenAmount * lapG).toInt().coerceIn(0, 255)
