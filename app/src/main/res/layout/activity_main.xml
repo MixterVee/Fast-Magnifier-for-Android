@@ -98,16 +98,20 @@
         app:layout_constraintBottom_toTopOf="@id/statusText"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <TextView
+    <com.mixtervee.fastmagnifier.GuidanceTextView
         android:id="@+id/statusText"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
         android:layout_marginBottom="8dp"
-        android:background="#99000000"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="6dp"
-        android:text="Slide up/down to zoom • Tap focus • Hold to freeze"
+        android:background="@drawable/instruction_panel_bg"
+        android:gravity="center"
+        android:maxLines="3"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:text="Camera ready"
         android:textColor="@color/white"
+        android:textSize="14sp"
         app:layout_constraintBottom_toTopOf="@id/modeBar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
@@ -178,13 +182,17 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/undoButton"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
             android:enabled="false"
+            android:minWidth="82dp"
             android:text="Undo"
-            android:visibility="gone" />
+            android:visibility="gone"
+            app:icon="@drawable/ic_undo"
+            app:iconGravity="textStart"
+            app:iconPadding="5dp"
+            app:iconSize="18dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/saveButton"
