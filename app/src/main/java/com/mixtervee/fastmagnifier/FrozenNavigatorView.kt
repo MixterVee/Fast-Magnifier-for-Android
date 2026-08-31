@@ -67,7 +67,6 @@ class FrozenNavigatorView @JvmOverloads constructor(
         canvas.drawRect(viewportRect, viewportFillPaint)
         canvas.drawRect(viewportRect, viewportStrokePaint)
 
-        // Keep the small overview synchronized while the main one-finger zoom is moving.
         postInvalidateOnAnimation()
     }
 
@@ -151,7 +150,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
         rootView.findViewById(R.id.frozenImage)
 
     private fun setStatus(message: String) {
-        rootView.findViewById<TextView?>(R.id.statusText)?.text = message
+        rootView.findViewById<TextView>(R.id.statusText)?.text = message
     }
 
     private fun dp(value: Float): Float = value * resources.displayMetrics.density
