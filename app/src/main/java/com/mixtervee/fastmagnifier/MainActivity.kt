@@ -710,8 +710,7 @@ class MainActivity : AppCompatActivity() {
                             binding.readTextButton.isEnabled = !ocrInProgress
                             binding.saveButton.isEnabled = true
                             if (!ocrInProgress) {
-                                binding.statusText.text =
-                                    "High-resolution capture ready in ${ms} ms • ${qualitySource.width}×${qualitySource.height}"
+                                binding.statusText.text = "Hi-Res Picture Taken"
                             }
                         }
                     } catch (_: Throwable) {
