@@ -82,7 +82,7 @@
         android:background="#99000000"
         android:paddingHorizontal="10dp"
         android:paddingVertical="6dp"
-        android:text="Slide up/down to zoom • Tap to focus"
+        android:text="Slide up/down to zoom • Tap focus • Hold to freeze"
         android:textColor="@color/white"
         app:layout_constraintBottom_toTopOf="@id/bottomBar"
         app:layout_constraintEnd_toEndOf="parent"
@@ -103,15 +103,7 @@
             android:id="@+id/freezeButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Freeze" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/enhanceButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-            android:enabled="false"
-            android:text="Enhance" />
+            android:text="Freeze + Enhance" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/toggleButton"
