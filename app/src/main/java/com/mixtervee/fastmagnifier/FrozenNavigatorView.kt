@@ -19,6 +19,12 @@ class FrozenNavigatorView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
+    private companion object {
+        const val DEFAULT_SHOW_MS = 2200L
+        const val MANUAL_SHOW_MS = 4500L
+        const val AFTER_DRAG_SHOW_MS = 3500L
+    }
+
     private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(210, 10, 16, 24)
         style = Paint.Style.FILL
@@ -67,7 +73,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
         canvas.drawRect(viewportRect, viewportStrokePaint)
     }
 
-    fun showTemporarily(autoHideMs: Long = 2200L): Boolean {
+    fun showTemporarily(autoHideMs: Long = DEFAULT_SHOW_MS): Boolean {
         val target = targetImage()
         if (target == null || target.visibility != VISIBLE || target.scaleX <= 1.01f) {
             hideImmediately()
@@ -89,22 +95,12 @@ class FrozenNavigatorView @JvmOverloads constructor(
         return true
     }
 
-    fun toggleVisibility(): Boolean {
-        val target = targetImage()
-        if (target == null || target.visibility != VISIBLE || target.scaleX <= 1.01f) {
-            hideImmediately()
-            return false
-        }
-
-        val isShowing = visibility == VISIBLE && alpha > 0.25f
-        return if (isShowing) {
-            fadeOut()
-            false
-        } else {
-            showTemporarily(4500L)
-            true
-        }
-    }
+    /**
+     * A tap on the frozen image should always make the navigator easier to use.
+     * If it is already visible or fading, refresh it and restart the timer rather
+     * than interpreting the tap as a request to hide it.
+     */
+    fun toggleVisibility(): Boolean = showTemporarily(MANUAL_SHOW_MS)
 
     fun hideImmediately() {
         removeCallbacks(hideRunnable)
@@ -163,7 +159,8 @@ class FrozenNavigatorView @JvmOverloads constructor(
                 setStatus(
                     "Frozen zoom ${String.format(java.util.Locale.US, "%.1f", target.scaleX)}× • tap image to show overview"
                 )
-                postDelayed(hideRunnable, 2200L)
+                removeCallbacks(hideRunnable)
+                postDelayed(hideRunnable, AFTER_DRAG_SHOW_MS)
                 performClick()
                 return true
             }
