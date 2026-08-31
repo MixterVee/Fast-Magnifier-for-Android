@@ -1,13 +1,16 @@
 package com.mixtervee.fastmagnifier
 
 import android.Manifest
+import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.ViewConfiguration
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,6 +22,8 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import com.mixtervee.fastmagnifier.databinding.ActivityMainBinding
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -28,6 +33,7 @@ import kotlin.math.max
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
+    private lateinit var frozenScaleDetector: ScaleGestureDetector
     private var camera: Camera? = null
     private var original: Bitmap? = null
     private var enhanced: Bitmap? = null
@@ -43,6 +49,11 @@ class MainActivity : AppCompatActivity() {
     private var longPressTriggered = false
     private var touchSlop = 12f
     private var enhanceRequestId = 0
+
+    private var frozenScale = 1f
+    private var frozenLastX = 0f
+    private var frozenLastY = 0f
+    private var frozenDragging = false
 
     enum class Mode { TEXT, DETAIL, DISTANCE }
 
@@ -64,6 +75,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         touchSlop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
 
+        setupFrozenImageGestures()
+
         binding.textMode.setOnClickListener { selectMode(Mode.TEXT) }
         binding.detailMode.setOnClickListener { selectMode(Mode.DETAIL) }
         binding.distanceMode.setOnClickListener { selectMode(Mode.DISTANCE) }
@@ -71,6 +84,7 @@ class MainActivity : AppCompatActivity() {
             if (binding.frozenImage.visibility == View.VISIBLE) resumeLive() else freezeAndAutoEnhance()
         }
         binding.toggleButton.setOnClickListener { toggleOriginalEnhanced() }
+        binding.saveButton.setOnClickListener { saveCurrentPicture() }
         binding.previewView.setOnTouchListener { _, event -> handleTouch(event) }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
@@ -78,6 +92,70 @@ class MainActivity : AppCompatActivity() {
         } else {
             requestCamera.launch(Manifest.permission.CAMERA)
         }
+    }
+
+    private fun setupFrozenImageGestures() {
+        frozenScaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                frozenDragging = false
+                return true
+            }
+
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                val oldScale = frozenScale
+                frozenScale = (frozenScale * detector.scaleFactor).coerceIn(1f, 8f)
+                if (oldScale != frozenScale) {
+                    binding.frozenImage.pivotX = detector.focusX
+                    binding.frozenImage.pivotY = detector.focusY
+                    binding.frozenImage.scaleX = frozenScale
+                    binding.frozenImage.scaleY = frozenScale
+                    binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}× • drag to pan"
+                }
+                return true
+            }
+        })
+
+        binding.frozenImage.setOnTouchListener { _, event ->
+            frozenScaleDetector.onTouchEvent(event)
+
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    frozenLastX = event.x
+                    frozenLastY = event.y
+                    frozenDragging = false
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    if (!frozenScaleDetector.isInProgress && frozenScale > 1f) {
+                        val dx = event.x - frozenLastX
+                        val dy = event.y - frozenLastY
+                        if (hypot(dx.toDouble(), dy.toDouble()) > 1.0) frozenDragging = true
+                        binding.frozenImage.translationX += dx
+                        binding.frozenImage.translationY += dy
+                        frozenLastX = event.x
+                        frozenLastY = event.y
+                    }
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (!frozenScaleDetector.isInProgress && !frozenDragging && frozenScale <= 1f) {
+                        binding.statusText.text = "Pinch to zoom • Save keeps full image"
+                    }
+                }
+            }
+            true
+        }
+    }
+
+    private fun resetFrozenZoom() {
+        frozenScale = 1f
+        frozenDragging = false
+        binding.frozenImage.scaleX = 1f
+        binding.frozenImage.scaleY = 1f
+        binding.frozenImage.translationX = 0f
+        binding.frozenImage.translationY = 0f
+        binding.frozenImage.pivotX = binding.frozenImage.width / 2f
+        binding.frozenImage.pivotY = binding.frozenImage.height / 2f
     }
 
     private fun startCamera() {
@@ -245,6 +323,7 @@ class MainActivity : AppCompatActivity() {
         original = scaleForSpeed(shot)
         enhanced = null
         showingEnhanced = false
+        resetFrozenZoom()
         binding.frozenImage.setImageBitmap(original)
         binding.frozenImage.visibility = View.VISIBLE
         binding.previewView.visibility = View.GONE
@@ -252,6 +331,7 @@ class MainActivity : AppCompatActivity() {
         binding.freezeButton.text = "Resume"
         binding.toggleButton.isEnabled = false
         binding.toggleButton.text = "Original"
+        binding.saveButton.isEnabled = true
         binding.statusText.text = "Frozen • Enhancing…"
         enhanceFrozen()
     }
@@ -261,12 +341,14 @@ class MainActivity : AppCompatActivity() {
         original = null
         enhanced = null
         showingEnhanced = false
+        resetFrozenZoom()
         binding.frozenImage.visibility = View.GONE
         binding.previewView.visibility = View.VISIBLE
         binding.focusRing.visibility = View.GONE
         binding.freezeButton.text = "Freeze + Enhance"
         binding.toggleButton.isEnabled = false
         binding.toggleButton.text = "Original"
+        binding.saveButton.isEnabled = false
         binding.statusText.text = liveHint()
     }
 
@@ -288,7 +370,8 @@ class MainActivity : AppCompatActivity() {
                     binding.frozenImage.setImageBitmap(out)
                     binding.toggleButton.isEnabled = true
                     binding.toggleButton.text = "Original"
-                    binding.statusText.text = "Enhanced in ${ms} ms • ${modeLabel(selectedMode)}"
+                    binding.saveButton.isEnabled = true
+                    binding.statusText.text = "Enhanced in ${ms} ms • Pinch to zoom"
                 }
             } catch (t: Throwable) {
                 runOnUiThread {
@@ -296,6 +379,7 @@ class MainActivity : AppCompatActivity() {
                     showingEnhanced = false
                     binding.frozenImage.setImageBitmap(original)
                     binding.toggleButton.isEnabled = false
+                    binding.saveButton.isEnabled = true
                     binding.statusText.text = "Enhance error: ${t.javaClass.simpleName}"
                 }
             }
@@ -307,7 +391,64 @@ class MainActivity : AppCompatActivity() {
         showingEnhanced = !showingEnhanced
         binding.frozenImage.setImageBitmap(if (showingEnhanced) e else original)
         binding.toggleButton.text = if (showingEnhanced) "Original" else "Enhanced"
-        binding.statusText.text = if (showingEnhanced) "Enhanced • ${modeLabel(mode)}" else "Original"
+        binding.statusText.text = if (showingEnhanced) {
+            "Enhanced • Pinch to zoom • Save available"
+        } else {
+            "Original • Pinch to zoom • Save available"
+        }
+    }
+
+    private fun saveCurrentPicture() {
+        val bitmap = if (showingEnhanced) enhanced ?: original else original
+        if (bitmap == null) {
+            binding.statusText.text = "Nothing to save"
+            return
+        }
+
+        binding.saveButton.isEnabled = false
+        binding.statusText.text = "Saving picture…"
+
+        worker.execute {
+            try {
+                val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                val name = "FastMagnifier_$stamp.jpg"
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, name)
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Fast Magnifier")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+
+                val resolver = contentResolver
+                val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                    ?: error("Could not create image")
+
+                try {
+                    resolver.openOutputStream(uri)?.use { stream ->
+                        if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 96, stream)) {
+                            error("Could not encode image")
+                        }
+                    } ?: error("Could not open image file")
+
+                    values.clear()
+                    values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                    resolver.update(uri, values, null, null)
+                } catch (t: Throwable) {
+                    resolver.delete(uri, null, null)
+                    throw t
+                }
+
+                runOnUiThread {
+                    binding.saveButton.isEnabled = true
+                    binding.statusText.text = "Saved to Pictures/Fast Magnifier"
+                }
+            } catch (t: Throwable) {
+                runOnUiThread {
+                    binding.saveButton.isEnabled = true
+                    binding.statusText.text = "Save failed: ${t.javaClass.simpleName}"
+                }
+            }
+        }
     }
 
     private fun scaleForSpeed(src: Bitmap): Bitmap {
