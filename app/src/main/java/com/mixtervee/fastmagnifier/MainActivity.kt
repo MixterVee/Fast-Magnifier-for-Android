@@ -3,10 +3,6 @@ package com.mixtervee.fastmagnifier
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.ColorMatrix
-import android.graphics.ColorMatrixColorFilter
-import android.graphics.Paint
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
@@ -46,8 +42,9 @@ class MainActivity : AppCompatActivity() {
         scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 val c = camera ?: return false
-                val current = c.cameraInfo.zoomState.value?.zoomRatio ?: 1f
-                c.cameraControl.setZoomRatio((current * detector.scaleFactor).coerceIn(1f, c.cameraInfo.zoomState.value?.maxZoomRatio ?: 10f))
+                val state = c.cameraInfo.zoomState.value ?: return false
+                val target = (state.zoomRatio * detector.scaleFactor).coerceIn(1f, state.maxZoomRatio)
+                c.cameraControl.setZoomRatio(target)
                 return true
             }
         })
@@ -62,14 +59,18 @@ class MainActivity : AppCompatActivity() {
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera()
-        } else requestCamera.launch(Manifest.permission.CAMERA)
+        } else {
+            requestCamera.launch(Manifest.permission.CAMERA)
+        }
     }
 
     private fun startCamera() {
         val providerFuture = ProcessCameraProvider.getInstance(this)
         providerFuture.addListener({
             val provider = providerFuture.get()
-            val preview = Preview.Builder().build().also { it.surfaceProvider = binding.previewView.surfaceProvider }
+            val preview = Preview.Builder().build().also {
+                it.surfaceProvider = binding.previewView.surfaceProvider
+            }
             provider.unbindAll()
             camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview)
         }, ContextCompat.getMainExecutor(this))
@@ -77,6 +78,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleTouch(event: MotionEvent): Boolean {
         if (binding.frozenImage.visibility == android.view.View.VISIBLE) return true
+
         scaleDetector.onTouchEvent(event)
         if (!scaleDetector.isInProgress && event.action == MotionEvent.ACTION_UP) {
             val point = binding.previewView.meteringPointFactory.createPoint(event.x, event.y)
@@ -107,6 +109,7 @@ class MainActivity : AppCompatActivity() {
             binding.statusText.text = "Could not capture preview"
             return
         }
+
         original = scaleForSpeed(shot)
         enhanced = null
         showingEnhanced = false
@@ -121,20 +124,32 @@ class MainActivity : AppCompatActivity() {
 
     private fun enhanceFrozen() {
         val src = original ?: return
+        val selectedMode = mode
         binding.enhanceButton.isEnabled = false
         binding.statusText.text = "Enhancing…"
         val start = System.nanoTime()
+
         worker.execute {
-            val out = fastEnhance(src, mode)
-            val ms = (System.nanoTime() - start) / 1_000_000
-            enhanced = out
-            showingEnhanced = true
-            runOnUiThread {
-                binding.frozenImage.setImageBitmap(out)
-                binding.toggleButton.isEnabled = true
-                binding.toggleButton.text = "Original"
-                binding.enhanceButton.isEnabled = true
-                binding.statusText.text = "Enhanced in ${ms} ms"
+            try {
+                val out = fastEnhance(src, selectedMode)
+                val ms = (System.nanoTime() - start) / 1_000_000
+                enhanced = out
+                showingEnhanced = true
+                runOnUiThread {
+                    binding.frozenImage.setImageBitmap(out)
+                    binding.toggleButton.isEnabled = true
+                    binding.toggleButton.text = "Original"
+                    binding.enhanceButton.isEnabled = true
+                    binding.statusText.text = "Enhanced in ${ms} ms"
+                }
+            } catch (t: Throwable) {
+                runOnUiThread {
+                    showingEnhanced = false
+                    binding.frozenImage.setImageBitmap(original)
+                    binding.enhanceButton.isEnabled = true
+                    binding.toggleButton.isEnabled = false
+                    binding.statusText.text = "Enhance error: ${t.javaClass.simpleName}"
+                }
             }
         }
     }
@@ -150,63 +165,93 @@ class MainActivity : AppCompatActivity() {
         val maxDim = max(src.width, src.height)
         if (maxDim <= 1920) return src.copy(Bitmap.Config.ARGB_8888, false)
         val scale = 1920f / maxDim
-        return Bitmap.createScaledBitmap(src, (src.width * scale).toInt(), (src.height * scale).toInt(), true)
+        return Bitmap.createScaledBitmap(
+            src,
+            (src.width * scale).toInt(),
+            (src.height * scale).toInt(),
+            true
+        )
     }
 
     private fun fastEnhance(src: Bitmap, mode: Mode): Bitmap {
+        val width = src.width
+        val height = src.height
+        val count = width * height
+        val input = IntArray(count)
+        val adjusted = IntArray(count)
+        val output = IntArray(count)
+        src.getPixels(input, 0, width, 0, 0, width, height)
+
         val contrast = when (mode) {
-            Mode.TEXT -> 1.42f
-            Mode.DETAIL -> 1.22f
-            Mode.DISTANCE -> 1.30f
+            Mode.TEXT -> 1.34f
+            Mode.DETAIL -> 1.16f
+            Mode.DISTANCE -> 1.22f
         }
         val saturation = when (mode) {
-            Mode.TEXT -> 0.55f
-            Mode.DETAIL -> 1.05f
-            Mode.DISTANCE -> 1.0f
+            Mode.TEXT -> 0.45f
+            Mode.DETAIL -> 1.03f
+            Mode.DISTANCE -> 0.95f
         }
         val brightness = when (mode) {
-            Mode.TEXT -> 8f
-            Mode.DETAIL -> 3f
-            Mode.DISTANCE -> 5f
+            Mode.TEXT -> 7f
+            Mode.DETAIL -> 2f
+            Mode.DISTANCE -> 4f
+        }
+        val sharpenAmount = when (mode) {
+            Mode.TEXT -> 0.55f
+            Mode.DETAIL -> 0.38f
+            Mode.DISTANCE -> 0.46f
         }
 
-        val base = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
-        val cm = ColorMatrix().apply {
-            setSaturation(saturation)
-            val offset = 128f * (1f - contrast) + brightness
-            postConcat(ColorMatrix(floatArrayOf(
-                contrast, 0f, 0f, 0f, offset,
-                0f, contrast, 0f, 0f, offset,
-                0f, 0f, contrast, 0f, offset,
-                0f, 0f, 0f, 1f, 0f
-            )))
-        }
-        Canvas(base).drawBitmap(src, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            colorFilter = ColorMatrixColorFilter(cm)
-        })
+        // Pass 1: brightness, contrast and saturation. This is intentionally
+        // simple arithmetic so it stays fast and predictable on the phone.
+        for (i in 0 until count) {
+            val p = input[i]
+            val r0 = (p shr 16) and 0xff
+            val g0 = (p shr 8) and 0xff
+            val b0 = p and 0xff
+            val luma = (77 * r0 + 150 * g0 + 29 * b0) shr 8
 
-        val small = Bitmap.createScaledBitmap(base, max(1, base.width / 2), max(1, base.height / 2), true)
-        val blur = Bitmap.createScaledBitmap(small, base.width, base.height, true)
-        val amount = when (mode) {
-            Mode.TEXT -> 1.35f
-            Mode.DETAIL -> 0.90f
-            Mode.DISTANCE -> 1.10f
+            val rs = luma + ((r0 - luma) * saturation).toInt()
+            val gs = luma + ((g0 - luma) * saturation).toInt()
+            val bs = luma + ((b0 - luma) * saturation).toInt()
+
+            val r = (((rs - 128) * contrast) + 128 + brightness).toInt().coerceIn(0, 255)
+            val g = (((gs - 128) * contrast) + 128 + brightness).toInt().coerceIn(0, 255)
+            val b = (((bs - 128) * contrast) + 128 + brightness).toInt().coerceIn(0, 255)
+            adjusted[i] = (0xff shl 24) or (r shl 16) or (g shl 8) or b
         }
 
-        val out = Bitmap.createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(out)
-        canvas.drawBitmap(base, 0f, 0f, null)
-        val subtractBlur = ColorMatrix(floatArrayOf(
-            -amount, 0f, 0f, 0f, 0f,
-            0f, -amount, 0f, 0f, 0f,
-            0f, 0f, -amount, 0f, 0f,
-            0f, 0f, 0f, 1f, 0f
-        ))
-        canvas.drawBitmap(blur, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            colorFilter = ColorMatrixColorFilter(subtractBlur)
-        })
+        // Keep the outside edge unchanged; sharpen the interior with a light
+        // Laplacian. Unlike the previous Canvas blend, this cannot create a
+        // transparent/blank result.
+        adjusted.copyInto(output)
+        for (y in 1 until height - 1) {
+            val row = y * width
+            for (x in 1 until width - 1) {
+                val i = row + x
+                val c = adjusted[i]
+                val l = adjusted[i - 1]
+                val r = adjusted[i + 1]
+                val u = adjusted[i - width]
+                val d = adjusted[i + width]
 
-        return out
+                val cr = (c shr 16) and 0xff
+                val cg = (c shr 8) and 0xff
+                val cb = c and 0xff
+
+                val lapR = 4 * cr - ((l shr 16) and 0xff) - ((r shr 16) and 0xff) - ((u shr 16) and 0xff) - ((d shr 16) and 0xff)
+                val lapG = 4 * cg - ((l shr 8) and 0xff) - ((r shr 8) and 0xff) - ((u shr 8) and 0xff) - ((d shr 8) and 0xff)
+                val lapB = 4 * cb - (l and 0xff) - (r and 0xff) - (u and 0xff) - (d and 0xff)
+
+                val nr = (cr + sharpenAmount * lapR).toInt().coerceIn(0, 255)
+                val ng = (cg + sharpenAmount * lapG).toInt().coerceIn(0, 255)
+                val nb = (cb + sharpenAmount * lapB).toInt().coerceIn(0, 255)
+                output[i] = (0xff shl 24) or (nr shl 16) or (ng shl 8) or nb
+            }
+        }
+
+        return Bitmap.createBitmap(output, width, height, Bitmap.Config.ARGB_8888)
     }
 
     override fun onDestroy() {
