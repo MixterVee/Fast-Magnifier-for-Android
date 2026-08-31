@@ -4,6 +4,9 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -31,14 +34,25 @@ class MainActivity : AppCompatActivity() {
     private var showingEnhanced = false
     private var mode = Mode.DETAIL
     private val worker = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var touchDownX = 0f
     private var touchDownY = 0f
     private var touchStartZoom = 1f
     private var zoomGesture = false
+    private var longPressTriggered = false
     private var touchSlop = 12f
+    private var enhanceRequestId = 0
 
     enum class Mode { TEXT, DETAIL, DISTANCE }
+
+    private val longPressRunnable = Runnable {
+        if (!zoomGesture && binding.frozenImage.visibility != View.VISIBLE) {
+            longPressTriggered = true
+            binding.previewView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            freezeAndAutoEnhance()
+        }
+    }
 
     private val requestCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startCamera() else binding.statusText.text = "Camera permission is required"
@@ -50,11 +64,12 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         touchSlop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
 
-        binding.textMode.setOnClickListener { mode = Mode.TEXT; binding.statusText.text = "Text mode" }
-        binding.detailMode.setOnClickListener { mode = Mode.DETAIL; binding.statusText.text = "Detail mode" }
-        binding.distanceMode.setOnClickListener { mode = Mode.DISTANCE; binding.statusText.text = "Distance mode" }
-        binding.freezeButton.setOnClickListener { freezeOrResume() }
-        binding.enhanceButton.setOnClickListener { enhanceFrozen() }
+        binding.textMode.setOnClickListener { selectMode(Mode.TEXT) }
+        binding.detailMode.setOnClickListener { selectMode(Mode.DETAIL) }
+        binding.distanceMode.setOnClickListener { selectMode(Mode.DISTANCE) }
+        binding.freezeButton.setOnClickListener {
+            if (binding.frozenImage.visibility == View.VISIBLE) resumeLive() else freezeAndAutoEnhance()
+        }
         binding.toggleButton.setOnClickListener { toggleOriginalEnhanced() }
         binding.previewView.setOnTouchListener { _, event -> handleTouch(event) }
 
@@ -74,9 +89,11 @@ class MainActivity : AppCompatActivity() {
             }
             provider.unbindAll()
             camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview)
-            binding.statusText.text = "Slide up/down to zoom • Tap to focus"
+            binding.statusText.text = liveHint()
         }, ContextCompat.getMainExecutor(this))
     }
+
+    private fun liveHint(): String = "Slide up/down to zoom • Tap focus • Hold to freeze"
 
     private fun handleTouch(event: MotionEvent): Boolean {
         if (binding.frozenImage.visibility == View.VISIBLE) return true
@@ -87,9 +104,12 @@ class MainActivity : AppCompatActivity() {
                 touchDownY = event.y
                 touchStartZoom = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: 1f
                 zoomGesture = false
+                longPressTriggered = false
                 binding.focusRing.animate().cancel()
                 binding.focusRing.visibility = View.GONE
                 binding.focusRing.alpha = 1f
+                mainHandler.removeCallbacks(longPressRunnable)
+                mainHandler.postDelayed(longPressRunnable, ViewConfiguration.getLongPressTimeout().toLong())
             }
 
             MotionEvent.ACTION_MOVE -> {
@@ -97,6 +117,7 @@ class MainActivity : AppCompatActivity() {
                 val dy = event.y - touchDownY
                 if (!zoomGesture && hypot(dx.toDouble(), dy.toDouble()) > touchSlop * 1.25) {
                     zoomGesture = true
+                    mainHandler.removeCallbacks(longPressRunnable)
                 }
 
                 if (zoomGesture) {
@@ -112,21 +133,27 @@ class MainActivity : AppCompatActivity() {
             }
 
             MotionEvent.ACTION_UP -> {
+                mainHandler.removeCallbacks(longPressRunnable)
                 val dx = event.x - touchDownX
                 val dy = event.y - touchDownY
                 val movement = hypot(dx.toDouble(), dy.toDouble())
 
-                if (!zoomGesture && movement <= touchSlop * 1.5) {
-                    focusAt(event.x, event.y)
-                } else if (zoomGesture) {
-                    val ratio = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: touchStartZoom
-                    binding.statusText.text = "Zoom ${formatZoom(ratio)}× • slide up/down"
+                if (!longPressTriggered) {
+                    if (!zoomGesture && movement <= touchSlop * 1.5) {
+                        focusAt(event.x, event.y)
+                    } else if (zoomGesture) {
+                        val ratio = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: touchStartZoom
+                        binding.statusText.text = "Zoom ${formatZoom(ratio)}× • slide up/down"
+                    }
                 }
                 zoomGesture = false
+                longPressTriggered = false
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                mainHandler.removeCallbacks(longPressRunnable)
                 zoomGesture = false
+                longPressTriggered = false
             }
         }
         return true
@@ -145,15 +172,17 @@ class MainActivity : AppCompatActivity() {
         c.cameraControl.cancelFocusAndMetering()
         val future = c.cameraControl.startFocusAndMetering(action)
         future.addListener({
-            try {
-                val result = future.get()
-                binding.statusText.text = if (result.isFocusSuccessful) {
-                    "Focus locked"
-                } else {
-                    "Focus adjusted"
+            if (binding.frozenImage.visibility != View.VISIBLE) {
+                try {
+                    val result = future.get()
+                    binding.statusText.text = if (result.isFocusSuccessful) {
+                        "Focus locked • Hold to freeze"
+                    } else {
+                        "Focus adjusted • Hold to freeze"
+                    }
+                } catch (_: Throwable) {
+                    binding.statusText.text = liveHint()
                 }
-            } catch (_: Throwable) {
-                binding.statusText.text = "Tap to focus"
             }
 
             binding.focusRing.animate()
@@ -188,20 +217,25 @@ class MainActivity : AppCompatActivity() {
 
     private fun formatZoom(value: Float): String = String.format(Locale.US, "%.1f", value)
 
-    private fun freezeOrResume() {
-        if (binding.frozenImage.visibility == View.VISIBLE) {
-            original = null
+    private fun selectMode(newMode: Mode) {
+        mode = newMode
+        if (binding.frozenImage.visibility == View.VISIBLE && original != null) {
             enhanced = null
             showingEnhanced = false
-            binding.frozenImage.visibility = View.GONE
-            binding.previewView.visibility = View.VISIBLE
-            binding.focusRing.visibility = View.GONE
-            binding.freezeButton.text = "Freeze"
-            binding.enhanceButton.isEnabled = false
+            binding.frozenImage.setImageBitmap(original)
             binding.toggleButton.isEnabled = false
-            binding.statusText.text = "Slide up/down to zoom • Tap to focus"
-            return
+            binding.statusText.text = "${modeLabel(newMode)} mode • Enhancing…"
+            enhanceFrozen()
+        } else {
+            binding.statusText.text = "${modeLabel(newMode)} mode • ${liveHint()}"
         }
+    }
+
+    private fun modeLabel(value: Mode): String = value.name.lowercase().replaceFirstChar { it.uppercase() }
+
+    private fun freezeAndAutoEnhance() {
+        if (binding.frozenImage.visibility == View.VISIBLE) return
+        mainHandler.removeCallbacks(longPressRunnable)
 
         val shot = binding.previewView.bitmap ?: run {
             binding.statusText.text = "Could not capture preview"
@@ -216,36 +250,51 @@ class MainActivity : AppCompatActivity() {
         binding.previewView.visibility = View.GONE
         binding.focusRing.visibility = View.GONE
         binding.freezeButton.text = "Resume"
-        binding.enhanceButton.isEnabled = true
         binding.toggleButton.isEnabled = false
-        binding.statusText.text = "Frozen • tap Enhance"
+        binding.toggleButton.text = "Original"
+        binding.statusText.text = "Frozen • Enhancing…"
+        enhanceFrozen()
+    }
+
+    private fun resumeLive() {
+        enhanceRequestId++
+        original = null
+        enhanced = null
+        showingEnhanced = false
+        binding.frozenImage.visibility = View.GONE
+        binding.previewView.visibility = View.VISIBLE
+        binding.focusRing.visibility = View.GONE
+        binding.freezeButton.text = "Freeze + Enhance"
+        binding.toggleButton.isEnabled = false
+        binding.toggleButton.text = "Original"
+        binding.statusText.text = liveHint()
     }
 
     private fun enhanceFrozen() {
         val src = original ?: return
         val selectedMode = mode
-        binding.enhanceButton.isEnabled = false
-        binding.statusText.text = "Enhancing…"
+        val requestId = ++enhanceRequestId
+        binding.toggleButton.isEnabled = false
         val start = System.nanoTime()
 
         worker.execute {
             try {
                 val out = fastEnhance(src, selectedMode)
                 val ms = (System.nanoTime() - start) / 1_000_000
-                enhanced = out
-                showingEnhanced = true
                 runOnUiThread {
+                    if (requestId != enhanceRequestId || binding.frozenImage.visibility != View.VISIBLE) return@runOnUiThread
+                    enhanced = out
+                    showingEnhanced = true
                     binding.frozenImage.setImageBitmap(out)
                     binding.toggleButton.isEnabled = true
                     binding.toggleButton.text = "Original"
-                    binding.enhanceButton.isEnabled = true
-                    binding.statusText.text = "Enhanced in ${ms} ms"
+                    binding.statusText.text = "Enhanced in ${ms} ms • ${modeLabel(selectedMode)}"
                 }
             } catch (t: Throwable) {
                 runOnUiThread {
+                    if (requestId != enhanceRequestId) return@runOnUiThread
                     showingEnhanced = false
                     binding.frozenImage.setImageBitmap(original)
-                    binding.enhanceButton.isEnabled = true
                     binding.toggleButton.isEnabled = false
                     binding.statusText.text = "Enhance error: ${t.javaClass.simpleName}"
                 }
@@ -258,6 +307,7 @@ class MainActivity : AppCompatActivity() {
         showingEnhanced = !showingEnhanced
         binding.frozenImage.setImageBitmap(if (showingEnhanced) e else original)
         binding.toggleButton.text = if (showingEnhanced) "Original" else "Enhanced"
+        binding.statusText.text = if (showingEnhanced) "Enhanced • ${modeLabel(mode)}" else "Original"
     }
 
     private fun scaleForSpeed(src: Bitmap): Bitmap {
@@ -349,6 +399,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(longPressRunnable)
         worker.shutdownNow()
         super.onDestroy()
     }
