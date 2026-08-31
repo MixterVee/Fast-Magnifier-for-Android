@@ -9,6 +9,7 @@ import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.os.Bundle
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.Camera
@@ -23,6 +24,7 @@ import kotlin.math.max
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
+    private lateinit var scaleDetector: ScaleGestureDetector
     private var camera: Camera? = null
     private var original: Bitmap? = null
     private var enhanced: Bitmap? = null
@@ -40,6 +42,15 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                val c = camera ?: return false
+                val current = c.cameraInfo.zoomState.value?.zoomRatio ?: 1f
+                c.cameraControl.setZoomRatio((current * detector.scaleFactor).coerceIn(1f, c.cameraInfo.zoomState.value?.maxZoomRatio ?: 10f))
+                return true
+            }
+        })
 
         binding.textMode.setOnClickListener { mode = Mode.TEXT; binding.statusText.text = "Text mode" }
         binding.detailMode.setOnClickListener { mode = Mode.DETAIL; binding.statusText.text = "Detail mode" }
@@ -66,19 +77,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleTouch(event: MotionEvent): Boolean {
         if (binding.frozenImage.visibility == android.view.View.VISIBLE) return true
-        if (event.action == MotionEvent.ACTION_DOWN) {
+        scaleDetector.onTouchEvent(event)
+        if (!scaleDetector.isInProgress && event.action == MotionEvent.ACTION_UP) {
             val point = binding.previewView.meteringPointFactory.createPoint(event.x, event.y)
             camera?.cameraControl?.startFocusAndMetering(
-                FocusMeteringAction.Builder(point).setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS).build()
+                FocusMeteringAction.Builder(point)
+                    .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
             )
-            return true
         }
-        return false
+        return true
     }
 
     private fun freezeOrResume() {
         if (binding.frozenImage.visibility == android.view.View.VISIBLE) {
-            original = null; enhanced = null; showingEnhanced = false
+            original = null
+            enhanced = null
+            showingEnhanced = false
             binding.frozenImage.visibility = android.view.View.GONE
             binding.previewView.visibility = android.view.View.VISIBLE
             binding.freezeButton.text = "Freeze"
@@ -87,6 +102,7 @@ class MainActivity : AppCompatActivity() {
             binding.statusText.text = "Pinch to zoom • Tap to focus"
             return
         }
+
         val shot = binding.previewView.bitmap ?: run {
             binding.statusText.text = "Could not capture preview"
             return
@@ -138,46 +154,59 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun fastEnhance(src: Bitmap, mode: Mode): Bitmap {
-        val contrast = when (mode) { Mode.TEXT -> 1.42f; Mode.DETAIL -> 1.22f; Mode.DISTANCE -> 1.30f }
-        val saturation = when (mode) { Mode.TEXT -> 0.55f; Mode.DETAIL -> 1.05f; Mode.DISTANCE -> 1.0f }
-        val brightness = when (mode) { Mode.TEXT -> 8f; Mode.DETAIL -> 3f; Mode.DISTANCE -> 5f }
+        val contrast = when (mode) {
+            Mode.TEXT -> 1.42f
+            Mode.DETAIL -> 1.22f
+            Mode.DISTANCE -> 1.30f
+        }
+        val saturation = when (mode) {
+            Mode.TEXT -> 0.55f
+            Mode.DETAIL -> 1.05f
+            Mode.DISTANCE -> 1.0f
+        }
+        val brightness = when (mode) {
+            Mode.TEXT -> 8f
+            Mode.DETAIL -> 3f
+            Mode.DISTANCE -> 5f
+        }
 
         val base = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
         val cm = ColorMatrix().apply {
             setSaturation(saturation)
             val offset = 128f * (1f - contrast) + brightness
             postConcat(ColorMatrix(floatArrayOf(
-                contrast,0f,0f,0f,offset,
-                0f,contrast,0f,0f,offset,
-                0f,0f,contrast,0f,offset,
-                0f,0f,0f,1f,0f
+                contrast, 0f, 0f, 0f, offset,
+                0f, contrast, 0f, 0f, offset,
+                0f, 0f, contrast, 0f, offset,
+                0f, 0f, 0f, 1f, 0f
             )))
         }
-        Canvas(base).drawBitmap(src, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG).apply { colorFilter = ColorMatrixColorFilter(cm) })
+        Canvas(base).drawBitmap(src, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            colorFilter = ColorMatrixColorFilter(cm)
+        })
 
         val small = Bitmap.createScaledBitmap(base, max(1, base.width / 2), max(1, base.height / 2), true)
         val blur = Bitmap.createScaledBitmap(small, base.width, base.height, true)
-        val amount = when (mode) { Mode.TEXT -> 1.35f; Mode.DETAIL -> 0.9f; Mode.DISTANCE -> 1.1f }
-        val a = 1f + amount
+        val amount = when (mode) {
+            Mode.TEXT -> 1.35f
+            Mode.DETAIL -> 0.90f
+            Mode.DISTANCE -> 1.10f
+        }
+
         val out = Bitmap.createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
-        canvas.drawBitmap(base, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = 255 })
-        val matrix = ColorMatrix(floatArrayOf(
-            -amount,0f,0f,0f,0f,
-            0f,-amount,0f,0f,0f,
-            0f,0f,-amount,0f,0f,
-            0f,0f,0f,1f,0f
+        canvas.drawBitmap(base, 0f, 0f, null)
+        val subtractBlur = ColorMatrix(floatArrayOf(
+            -amount, 0f, 0f, 0f, 0f,
+            0f, -amount, 0f, 0f, 0f,
+            0f, 0f, -amount, 0f, 0f,
+            0f, 0f, 0f, 1f, 0f
         ))
-        canvas.drawBitmap(blur, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG).apply { colorFilter = ColorMatrixColorFilter(matrix) })
-        val gain = ColorMatrix(floatArrayOf(
-            a,0f,0f,0f,0f,
-            0f,a,0f,0f,0f,
-            0f,0f,a,0f,0f,
-            0f,0f,0f,1f,0f
-        ))
-        val finalBmp = Bitmap.createBitmap(out.width, out.height, Bitmap.Config.ARGB_8888)
-        Canvas(finalBmp).drawBitmap(out, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG).apply { colorFilter = ColorMatrixColorFilter(gain) })
-        return finalBmp
+        canvas.drawBitmap(blur, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            colorFilter = ColorMatrixColorFilter(subtractBlur)
+        })
+
+        return out
     }
 
     override fun onDestroy() {
