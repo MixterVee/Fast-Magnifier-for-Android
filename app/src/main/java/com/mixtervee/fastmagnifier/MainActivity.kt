@@ -48,6 +48,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var frozenTapDetector: GestureDetector
     private lateinit var ocrController: OcrController
+    private lateinit var highResCaptureController: HighResCaptureController
     private var camera: Camera? = null
     private var original: Bitmap? = null
     private var enhanced: Bitmap? = null
@@ -63,6 +64,7 @@ class MainActivity : AppCompatActivity() {
     private var longPressTriggered = false
     private var touchSlop = 12f
     private var enhanceRequestId = 0
+    private var freezeSessionId = 0
 
     private var frozenTouchDownY = 0f
     private var frozenStartScale = 1f
@@ -96,6 +98,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         touchSlop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
         ocrController = OcrController(this) { message -> binding.statusText.text = message }
+        highResCaptureController = HighResCaptureController(ContextCompat.getMainExecutor(this))
 
         setupFrozenTapDetector()
         setupFrozenImageGestures()
@@ -395,8 +398,16 @@ class MainActivity : AppCompatActivity() {
             val preview = Preview.Builder().build().also {
                 it.surfaceProvider = binding.previewView.surfaceProvider
             }
+            val stillCapture = highResCaptureController.createUseCase(
+                binding.previewView.display?.rotation ?: 0
+            )
             provider.unbindAll()
-            camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview)
+            camera = provider.bindToLifecycle(
+                this,
+                CameraSelector.DEFAULT_BACK_CAMERA,
+                preview,
+                stillCapture
+            )
             setupCameraControls()
             binding.statusText.text = liveHint()
         }, ContextCompat.getMainExecutor(this))
@@ -630,6 +641,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        val sessionId = ++freezeSessionId
         original = scaleForSpeed(shot)
         enhanced = null
         showingEnhanced = false
@@ -651,9 +663,70 @@ class MainActivity : AppCompatActivity() {
         binding.exposureSlider.isEnabled = false
         binding.statusText.text = "Frozen • Enhancing…"
         enhanceFrozen()
+        captureHighResolutionUpgrade(sessionId)
+    }
+
+    private fun captureHighResolutionUpgrade(sessionId: Int) {
+        val selectedMode = mode
+        highResCaptureController.capture(
+            onReady = { qualitySource ->
+                if (
+                    sessionId != freezeSessionId ||
+                    binding.frozenImage.visibility != View.VISIBLE ||
+                    mode != selectedMode ||
+                    areaEnhancePasses > 0 ||
+                    areaEnhanceInProgress
+                ) {
+                    return@capture
+                }
+
+                val start = System.nanoTime()
+                worker.execute {
+                    try {
+                        val qualityEnhanced = fastEnhance(qualitySource, selectedMode)
+                        val ms = (System.nanoTime() - start) / 1_000_000
+                        runOnUiThread {
+                            if (
+                                sessionId != freezeSessionId ||
+                                binding.frozenImage.visibility != View.VISIBLE ||
+                                mode != selectedMode ||
+                                areaEnhancePasses > 0 ||
+                                areaEnhanceInProgress
+                            ) {
+                                return@runOnUiThread
+                            }
+
+                            val displayEnhanced = showingEnhanced
+                            original = qualitySource
+                            enhanced = qualityEnhanced
+                            resetAreaEnhanceHistory()
+                            showingEnhanced = displayEnhanced
+                            binding.frozenImage.setImageBitmap(
+                                if (showingEnhanced) qualityEnhanced else qualitySource
+                            )
+                            binding.frozenImage.clampPan()
+                            binding.toggleButton.isEnabled = true
+                            binding.toggleButton.text = if (showingEnhanced) "Original" else "Enhanced"
+                            binding.readTextButton.isEnabled = !ocrInProgress
+                            binding.saveButton.isEnabled = true
+                            if (!ocrInProgress) {
+                                binding.statusText.text =
+                                    "High-resolution capture ready in ${ms} ms • ${qualitySource.width}×${qualitySource.height}"
+                            }
+                        }
+                    } catch (_: Throwable) {
+                        // Keep the already-working preview-based frozen image if the upgrade fails.
+                    }
+                }
+            },
+            onError = {
+                // The fast PreviewView capture remains fully usable if still capture is unavailable.
+            }
+        )
     }
 
     private fun resumeLive() {
+        freezeSessionId++
         enhanceRequestId++
         original = null
         enhanced = null
@@ -921,6 +994,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         mainHandler.removeCallbacks(longPressRunnable)
         if (::ocrController.isInitialized) ocrController.close()
+        if (::highResCaptureController.isInitialized) highResCaptureController.close()
         worker.shutdownNow()
         super.onDestroy()
     }
