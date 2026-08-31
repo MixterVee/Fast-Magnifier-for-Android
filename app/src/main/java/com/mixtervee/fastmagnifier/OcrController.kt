@@ -8,7 +8,8 @@ import android.content.Intent
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import android.view.View
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
@@ -31,6 +32,34 @@ class OcrController(
     private val recognizer: TextRecognizer =
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
+    private var textToSpeech: TextToSpeech? = null
+    private var ttsReady = false
+    private var speechChunks: List<String> = emptyList()
+    private var speechIndex = 0
+    private var speechPaused = false
+    private var speechStopped = true
+    private var speechSession = 0
+    private var speakButton: MaterialButton? = null
+    private var stopSpeechButton: MaterialButton? = null
+
+    init {
+        textToSpeech = TextToSpeech(activity) { result ->
+            if (result == TextToSpeech.SUCCESS) {
+                val engine = textToSpeech
+                val languageResult = engine?.setLanguage(Locale.getDefault())
+                    ?: TextToSpeech.LANG_NOT_SUPPORTED
+                ttsReady = languageResult != TextToSpeech.LANG_MISSING_DATA &&
+                    languageResult != TextToSpeech.LANG_NOT_SUPPORTED
+                installSpeechListener()
+            } else {
+                ttsReady = false
+            }
+            activity.runOnUiThread {
+                speakButton?.isEnabled = ttsReady
+            }
+        }
+    }
+
     fun recognize(bitmap: android.graphics.Bitmap, sourceLabel: String, onFinished: () -> Unit) {
         val image = InputImage.fromBitmap(bitmap, 0)
         recognizer.process(image)
@@ -52,16 +81,38 @@ class OcrController(
     }
 
     fun close() {
+        stopSpeech(updateStatus = false)
+        textToSpeech?.shutdown()
+        textToSpeech = null
         recognizer.close()
     }
 
     private fun showResult(text: String) {
+        stopSpeech(updateStatus = false)
+
         val view = activity.layoutInflater.inflate(R.layout.dialog_ocr_result, null)
         view.findViewById<TextView>(R.id.ocrResultText).text = text
 
         val dialog = MaterialAlertDialogBuilder(activity)
             .setView(view)
             .create()
+
+        speakButton = view.findViewById<MaterialButton>(R.id.ocrSpeakButton).apply {
+            isEnabled = ttsReady
+            text = "Read Aloud"
+            setOnClickListener {
+                when {
+                    speechStopped -> startSpeech(text)
+                    speechPaused -> resumeSpeech()
+                    else -> pauseSpeech()
+                }
+            }
+        }
+
+        stopSpeechButton = view.findViewById<MaterialButton>(R.id.ocrStopSpeechButton).apply {
+            isEnabled = false
+            setOnClickListener { stopSpeech(updateStatus = true) }
+        }
 
         view.findViewById<MaterialButton>(R.id.ocrCopyButton).setOnClickListener {
             copyText(text)
@@ -76,7 +127,148 @@ class OcrController(
             dialog.dismiss()
         }
 
+        dialog.setOnDismissListener {
+            stopSpeech(updateStatus = false)
+            speakButton = null
+            stopSpeechButton = null
+        }
         dialog.show()
+    }
+
+    private fun installSpeechListener() {
+        textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) = Unit
+
+            override fun onDone(utteranceId: String?) {
+                val session = utteranceId?.substringBefore(':')?.toIntOrNull() ?: return
+                if (session != speechSession || speechPaused || speechStopped) return
+
+                activity.runOnUiThread {
+                    if (session != speechSession || speechPaused || speechStopped) return@runOnUiThread
+                    speechIndex++
+                    if (speechIndex >= speechChunks.size) {
+                        finishSpeech()
+                    } else {
+                        speakCurrentChunk()
+                    }
+                }
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                activity.runOnUiThread {
+                    stopSpeech(updateStatus = false)
+                    status("Could not read recognized text aloud")
+                }
+            }
+
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                onError(utteranceId)
+            }
+        })
+    }
+
+    private fun startSpeech(text: String) {
+        if (!ttsReady || textToSpeech == null) {
+            status("Text-to-speech voice is not ready on this device")
+            return
+        }
+
+        speechChunks = chunkForSpeech(text)
+        if (speechChunks.isEmpty()) return
+
+        speechSession++
+        speechIndex = 0
+        speechPaused = false
+        speechStopped = false
+        speakButton?.text = "Pause"
+        stopSpeechButton?.isEnabled = true
+        status("Reading recognized text aloud")
+        speakCurrentChunk()
+    }
+
+    private fun pauseSpeech() {
+        if (speechStopped || speechPaused) return
+        textToSpeech?.stop()
+        speechPaused = true
+        speakButton?.text = "Resume"
+        stopSpeechButton?.isEnabled = true
+        status("Reading paused")
+    }
+
+    private fun resumeSpeech() {
+        if (speechStopped || !speechPaused) return
+        speechPaused = false
+        speakButton?.text = "Pause"
+        stopSpeechButton?.isEnabled = true
+        status("Reading recognized text aloud")
+        speakCurrentChunk()
+    }
+
+    private fun stopSpeech(updateStatus: Boolean) {
+        textToSpeech?.stop()
+        speechSession++
+        speechChunks = emptyList()
+        speechIndex = 0
+        speechPaused = false
+        speechStopped = true
+        speakButton?.text = "Read Aloud"
+        speakButton?.isEnabled = ttsReady
+        stopSpeechButton?.isEnabled = false
+        if (updateStatus) status("Reading stopped")
+    }
+
+    private fun finishSpeech() {
+        speechChunks = emptyList()
+        speechIndex = 0
+        speechPaused = false
+        speechStopped = true
+        speakButton?.text = "Read Aloud"
+        speakButton?.isEnabled = ttsReady
+        stopSpeechButton?.isEnabled = false
+        status("Finished reading recognized text")
+    }
+
+    private fun speakCurrentChunk() {
+        if (speechStopped || speechPaused || speechIndex !in speechChunks.indices) return
+        val utteranceId = "$speechSession:$speechIndex"
+        textToSpeech?.speak(
+            speechChunks[speechIndex],
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            utteranceId
+        )
+    }
+
+    private fun chunkForSpeech(text: String): List<String> {
+        val normalized = text.replace("\r\n", "\n").trim()
+        if (normalized.isEmpty()) return emptyList()
+
+        val chunks = mutableListOf<String>()
+        val maxChars = 420
+        var remaining = normalized
+
+        while (remaining.isNotBlank()) {
+            if (remaining.length <= maxChars) {
+                chunks += remaining.trim()
+                break
+            }
+
+            val candidate = remaining.substring(0, maxChars)
+            val splitAt = maxOf(
+                candidate.lastIndexOf(". "),
+                candidate.lastIndexOf("? "),
+                candidate.lastIndexOf("! "),
+                candidate.lastIndexOf('\n'),
+                candidate.lastIndexOf(' ')
+            ).takeIf { it >= maxChars / 2 } ?: maxChars
+
+            val end = (splitAt + 1).coerceAtMost(remaining.length)
+            chunks += remaining.substring(0, end).trim()
+            remaining = remaining.substring(end).trimStart()
+        }
+
+        return chunks.filter { it.isNotBlank() }
     }
 
     private fun copyText(text: String) {
