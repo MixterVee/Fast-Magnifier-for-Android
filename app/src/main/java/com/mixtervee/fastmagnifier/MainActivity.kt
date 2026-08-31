@@ -32,6 +32,19 @@ import kotlin.math.hypot
 import kotlin.math.max
 
 class MainActivity : AppCompatActivity() {
+
+    private companion object {
+        const val MAX_AREA_ENHANCE_PASSES = 3
+    }
+
+    private data class AreaUndoStep(
+        val left: Int,
+        val top: Int,
+        val width: Int,
+        val height: Int,
+        val pixels: IntArray
+    )
+
     private lateinit var binding: ActivityMainBinding
     private lateinit var frozenTapDetector: GestureDetector
     private var camera: Camera? = null
@@ -54,6 +67,10 @@ class MainActivity : AppCompatActivity() {
     private var frozenStartScale = 1f
     private var frozenScale = 1f
     private var frozenZoomGesture = false
+
+    private val areaUndoHistory = mutableListOf<AreaUndoStep>()
+    private var areaEnhancePasses = 0
+    private var areaEnhanceInProgress = false
 
     private var torchEnabled = false
 
@@ -87,6 +104,7 @@ class MainActivity : AppCompatActivity() {
             if (binding.frozenImage.visibility == View.VISIBLE) resumeLive() else freezeAndAutoEnhance()
         }
         binding.toggleButton.setOnClickListener { toggleOriginalEnhanced() }
+        binding.undoButton.setOnClickListener { undoAreaEnhance() }
         binding.saveButton.setOnClickListener { saveCurrentPicture() }
         binding.lightButton.setOnClickListener { toggleTorch() }
         binding.exposureSlider.addOnChangeListener { _, value, fromUser ->
@@ -189,8 +207,22 @@ class MainActivity : AppCompatActivity() {
     private fun enhanceVisibleArea() {
         if (binding.frozenImage.visibility != View.VISIBLE || frozenScale <= 1.01f) return
 
-        val source = if (showingEnhanced) enhanced ?: original else original
-        if (source == null) return
+        if (areaEnhanceInProgress) {
+            binding.statusText.text = "Area enhancement is already running…"
+            return
+        }
+
+        if (areaEnhancePasses >= MAX_AREA_ENHANCE_PASSES) {
+            binding.statusText.text =
+                "Maximum $MAX_AREA_ENHANCE_PASSES area enhancements reached • Undo to go back"
+            return
+        }
+
+        val source = enhanced
+        if (source == null) {
+            binding.statusText.text = "Wait for the first enhancement to finish"
+            return
+        }
 
         val visible = binding.frozenImage.visibleBitmapRectNormalized()
         val left = (visible.left * source.width).toInt().coerceIn(0, source.width - 1)
@@ -205,14 +237,19 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        val previousPixels = IntArray(cropWidth * cropHeight)
+        source.getPixels(previousPixels, 0, cropWidth, left, top, cropWidth, cropHeight)
         val crop = Bitmap.createBitmap(source, left, top, cropWidth, cropHeight)
         val selectedMode = mode
         val requestId = ++enhanceRequestId
+        areaEnhanceInProgress = true
         binding.navigatorView.hideImmediately()
         binding.frozenImage.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
         binding.toggleButton.isEnabled = false
+        binding.undoButton.isEnabled = false
         binding.saveButton.isEnabled = false
-        binding.statusText.text = "Enhancing visible area…"
+        binding.statusText.text =
+            "Enhancing visible area… pass ${areaEnhancePasses + 1}/$MAX_AREA_ENHANCE_PASSES"
         val start = System.nanoTime()
 
         worker.execute {
@@ -225,21 +262,36 @@ class MainActivity : AppCompatActivity() {
                 val ms = (System.nanoTime() - start) / 1_000_000
 
                 runOnUiThread {
-                    if (requestId != enhanceRequestId || binding.frozenImage.visibility != View.VISIBLE) return@runOnUiThread
+                    areaEnhanceInProgress = false
+                    if (requestId != enhanceRequestId || binding.frozenImage.visibility != View.VISIBLE) {
+                        return@runOnUiThread
+                    }
+
+                    areaUndoHistory.add(
+                        AreaUndoStep(left, top, cropWidth, cropHeight, previousPixels)
+                    )
+                    areaEnhancePasses++
                     enhanced = out
                     showingEnhanced = true
                     binding.frozenImage.setImageBitmap(out)
                     binding.frozenImage.clampPan()
                     binding.toggleButton.isEnabled = true
                     binding.toggleButton.text = "Original"
+                    binding.undoButton.isEnabled = true
                     binding.saveButton.isEnabled = true
-                    binding.statusText.text =
-                        "Visible area enhanced in ${ms} ms • double-tap again for another pass"
+
+                    binding.statusText.text = if (areaEnhancePasses >= MAX_AREA_ENHANCE_PASSES) {
+                        "Area enhanced in ${ms} ms • $areaEnhancePasses/$MAX_AREA_ENHANCE_PASSES max reached • Undo available"
+                    } else {
+                        "Area enhanced in ${ms} ms • $areaEnhancePasses/$MAX_AREA_ENHANCE_PASSES • double-tap for another pass"
+                    }
                 }
             } catch (t: Throwable) {
                 runOnUiThread {
+                    areaEnhanceInProgress = false
                     if (requestId != enhanceRequestId) return@runOnUiThread
                     binding.toggleButton.isEnabled = enhanced != null
+                    binding.undoButton.isEnabled = areaUndoHistory.isNotEmpty()
                     binding.saveButton.isEnabled = true
                     binding.statusText.text = "Area enhance error: ${t.javaClass.simpleName}"
                 }
@@ -247,14 +299,67 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun undoAreaEnhance() {
+        if (areaEnhanceInProgress) {
+            binding.statusText.text = "Wait for area enhancement to finish"
+            return
+        }
+
+        if (areaUndoHistory.isEmpty()) {
+            binding.undoButton.isEnabled = false
+            binding.statusText.text = "Nothing to undo"
+            return
+        }
+
+        val current = enhanced
+        if (current == null) {
+            resetAreaEnhanceHistory()
+            binding.statusText.text = "Nothing to undo"
+            return
+        }
+
+        val step = areaUndoHistory.removeAt(areaUndoHistory.lastIndex)
+        val out = current.copy(Bitmap.Config.ARGB_8888, true)
+        out.setPixels(
+            step.pixels,
+            0,
+            step.width,
+            step.left,
+            step.top,
+            step.width,
+            step.height
+        )
+
+        areaEnhancePasses = (areaEnhancePasses - 1).coerceAtLeast(0)
+        enhanced = out
+        showingEnhanced = true
+        binding.frozenImage.setImageBitmap(out)
+        binding.frozenImage.clampPan()
+        binding.toggleButton.isEnabled = true
+        binding.toggleButton.text = "Original"
+        binding.undoButton.isEnabled = areaUndoHistory.isNotEmpty()
+        binding.saveButton.isEnabled = true
+        binding.frozenImage.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+
+        binding.statusText.text = if (areaEnhancePasses == 0) {
+            "Undone • back to normal enhanced image"
+        } else {
+            "Undone • $areaEnhancePasses/$MAX_AREA_ENHANCE_PASSES area enhancements remain"
+        }
+    }
+
+    private fun resetAreaEnhanceHistory() {
+        areaUndoHistory.clear()
+        areaEnhancePasses = 0
+        areaEnhanceInProgress = false
+        binding.undoButton.isEnabled = false
+    }
+
     private fun applyFrozenScale() {
         binding.frozenImage.pivotX = binding.frozenImage.width / 2f
         binding.frozenImage.pivotY = binding.frozenImage.height / 2f
         binding.frozenImage.scaleX = frozenScale
         binding.frozenImage.scaleY = frozenScale
-
-        // Re-clamp after every scale change. This prevents a translation that was valid
-        // at high zoom from leaving the entire bitmap off-screen after zooming back out.
         binding.frozenImage.clampPan()
 
         if (frozenScale > 1.01f) {
@@ -492,6 +597,7 @@ class MainActivity : AppCompatActivity() {
     private fun selectMode(newMode: Mode) {
         mode = newMode
         if (binding.frozenImage.visibility == View.VISIBLE && original != null) {
+            resetAreaEnhanceHistory()
             enhanced = null
             showingEnhanced = false
             binding.frozenImage.setImageBitmap(original)
@@ -518,6 +624,7 @@ class MainActivity : AppCompatActivity() {
         original = scaleForSpeed(shot)
         enhanced = null
         showingEnhanced = false
+        resetAreaEnhanceHistory()
         resetFrozenZoom()
         binding.frozenImage.setImageBitmap(original)
         binding.frozenImage.visibility = View.VISIBLE
@@ -527,6 +634,8 @@ class MainActivity : AppCompatActivity() {
         binding.freezeButton.text = "Resume"
         binding.toggleButton.isEnabled = false
         binding.toggleButton.text = "Original"
+        binding.undoButton.visibility = View.VISIBLE
+        binding.undoButton.isEnabled = false
         binding.saveButton.isEnabled = true
         binding.exposureSlider.isEnabled = false
         binding.statusText.text = "Frozen • Enhancing…"
@@ -538,6 +647,7 @@ class MainActivity : AppCompatActivity() {
         original = null
         enhanced = null
         showingEnhanced = false
+        resetAreaEnhanceHistory()
         resetFrozenZoom()
         binding.navigatorView.hideImmediately()
         binding.frozenImage.visibility = View.GONE
@@ -546,6 +656,8 @@ class MainActivity : AppCompatActivity() {
         binding.freezeButton.text = "Freeze + Enhance"
         binding.toggleButton.isEnabled = false
         binding.toggleButton.text = "Original"
+        binding.undoButton.visibility = View.GONE
+        binding.undoButton.isEnabled = false
         binding.saveButton.isEnabled = false
         setupCameraControls()
         binding.statusText.text = liveHint()
@@ -563,7 +675,10 @@ class MainActivity : AppCompatActivity() {
                 val out = fastEnhance(src, selectedMode)
                 val ms = (System.nanoTime() - start) / 1_000_000
                 runOnUiThread {
-                    if (requestId != enhanceRequestId || binding.frozenImage.visibility != View.VISIBLE) return@runOnUiThread
+                    if (requestId != enhanceRequestId || binding.frozenImage.visibility != View.VISIBLE) {
+                        return@runOnUiThread
+                    }
+                    resetAreaEnhanceHistory()
                     enhanced = out
                     showingEnhanced = true
                     binding.frozenImage.setImageBitmap(out)
@@ -597,7 +712,7 @@ class MainActivity : AppCompatActivity() {
         binding.statusText.text = if (showingEnhanced) {
             "Enhanced • Slide zoom • double-tap area to enhance • Save available"
         } else {
-            "Original • Slide zoom • double-tap area to enhance • Save available"
+            "Original • Slide zoom • tap Enhanced before area enhancement • Save available"
         }
     }
 
