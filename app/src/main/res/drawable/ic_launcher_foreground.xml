@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Cyan glow around the magnifying lens -->
+    <path
+        android:pathData="M54,21a31,31 0,1 0,0,62a31,31 0,1 0,0,-62"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#6600E5FF"
+        android:strokeWidth="9" />
+
+    <!-- Eye -->
+    <path
+        android:pathData="M25,52 C33,39 43,33 54,33 C65,33 76,39 84,52 C76,65 65,71 54,71 C43,71 33,65 25,52 Z"
+        android:fillColor="#F8FCFF" />
+
+    <!-- Iris -->
+    <path
+        android:pathData="M54,39a13,13 0,1 0,0,26a13,13 0,1 0,0,-26"
+        android:fillColor="#14D9FF" />
+    <path
+        android:pathData="M54,43a9,9 0,1 0,0,18a9,9 0,1 0,0,-18"
+        android:fillColor="#087BFF" />
+    <path
+        android:pathData="M54,47a5,5 0,1 0,0,10a5,5 0,1 0,0,-10"
+        android:fillColor="#061425" />
+    <path
+        android:pathData="M50,45a3,3 0,1 0,0,6a3,3 0,1 0,0,-6"
+        android:fillColor="#FFFFFFFF" />
+
+    <!-- Polished lens rim -->
+    <path
+        android:pathData="M54,21a31,31 0,1 0,0,62a31,31 0,1 0,0,-62"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#F4FBFF"
+        android:strokeWidth="5" />
+    <path
+        android:pathData="M54,26a26,26 0,1 0,0,52a26,26 0,1 0,0,-52"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#7AEAFF"
+        android:strokeWidth="2" />
+
+    <!-- Magnifier handle: silver edge, dark grip -->
+    <path
+        android:pathData="M75,74 L91,90"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#D9F6FF"
+        android:strokeWidth="11"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M75,74 L91,90"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#10243A"
+        android:strokeWidth="7"
+        android:strokeLineCap="round" />
+
+    <!-- Small highlight for a glossy finish -->
+    <path
+        android:pathData="M39,30 C44,26 49,24 55,24"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round" />
+</vector>
