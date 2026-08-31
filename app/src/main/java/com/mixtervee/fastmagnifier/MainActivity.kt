@@ -5,7 +5,8 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.MotionEvent
-import android.view.ScaleGestureDetector
+import android.view.View
+import android.view.ViewConfiguration
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.Camera
@@ -15,18 +16,27 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import com.mixtervee.fastmagnifier.databinding.ActivityMainBinding
+import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import kotlin.math.exp
+import kotlin.math.hypot
 import kotlin.math.max
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
-    private lateinit var scaleDetector: ScaleGestureDetector
     private var camera: Camera? = null
     private var original: Bitmap? = null
     private var enhanced: Bitmap? = null
     private var showingEnhanced = false
     private var mode = Mode.DETAIL
     private val worker = Executors.newSingleThreadExecutor()
+
+    private var touchDownX = 0f
+    private var touchDownY = 0f
+    private var touchStartZoom = 1f
+    private var zoomGesture = false
+    private var touchSlop = 12f
 
     enum class Mode { TEXT, DETAIL, DISTANCE }
 
@@ -38,16 +48,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                val c = camera ?: return false
-                val state = c.cameraInfo.zoomState.value ?: return false
-                val target = (state.zoomRatio * detector.scaleFactor).coerceIn(1f, state.maxZoomRatio)
-                c.cameraControl.setZoomRatio(target)
-                return true
-            }
-        })
+        touchSlop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
 
         binding.textMode.setOnClickListener { mode = Mode.TEXT; binding.statusText.text = "Text mode" }
         binding.detailMode.setOnClickListener { mode = Mode.DETAIL; binding.statusText.text = "Detail mode" }
@@ -73,35 +74,132 @@ class MainActivity : AppCompatActivity() {
             }
             provider.unbindAll()
             camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview)
+            binding.statusText.text = "Slide up/down to zoom • Tap to focus"
         }, ContextCompat.getMainExecutor(this))
     }
 
     private fun handleTouch(event: MotionEvent): Boolean {
-        if (binding.frozenImage.visibility == android.view.View.VISIBLE) return true
+        if (binding.frozenImage.visibility == View.VISIBLE) return true
 
-        scaleDetector.onTouchEvent(event)
-        if (!scaleDetector.isInProgress && event.action == MotionEvent.ACTION_UP) {
-            val point = binding.previewView.meteringPointFactory.createPoint(event.x, event.y)
-            camera?.cameraControl?.startFocusAndMetering(
-                FocusMeteringAction.Builder(point)
-                    .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
-                    .build()
-            )
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                touchDownX = event.x
+                touchDownY = event.y
+                touchStartZoom = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: 1f
+                zoomGesture = false
+                binding.focusRing.animate().cancel()
+                binding.focusRing.visibility = View.GONE
+                binding.focusRing.alpha = 1f
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                val dx = event.x - touchDownX
+                val dy = event.y - touchDownY
+                if (!zoomGesture && hypot(dx.toDouble(), dy.toDouble()) > touchSlop * 1.25) {
+                    zoomGesture = true
+                }
+
+                if (zoomGesture) {
+                    val c = camera ?: return true
+                    val state = c.cameraInfo.zoomState.value ?: return true
+                    val height = max(binding.previewView.height.toFloat(), 1f)
+                    val verticalTravel = (touchDownY - event.y) / (height * 0.55f)
+                    val target = (touchStartZoom * exp(verticalTravel.toDouble()).toFloat())
+                        .coerceIn(state.minZoomRatio, state.maxZoomRatio)
+                    c.cameraControl.setZoomRatio(target)
+                    binding.statusText.text = "Zoom ${formatZoom(target)}×"
+                }
+            }
+
+            MotionEvent.ACTION_UP -> {
+                val dx = event.x - touchDownX
+                val dy = event.y - touchDownY
+                val movement = hypot(dx.toDouble(), dy.toDouble())
+
+                if (!zoomGesture && movement <= touchSlop * 1.5) {
+                    focusAt(event.x, event.y)
+                } else if (zoomGesture) {
+                    val ratio = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: touchStartZoom
+                    binding.statusText.text = "Zoom ${formatZoom(ratio)}× • slide up/down"
+                }
+                zoomGesture = false
+            }
+
+            MotionEvent.ACTION_CANCEL -> {
+                zoomGesture = false
+            }
         }
         return true
     }
 
+    private fun focusAt(x: Float, y: Float) {
+        val c = camera ?: return
+        showFocusRing(x, y)
+        binding.statusText.text = "Focusing…"
+
+        val point = binding.previewView.meteringPointFactory.createPoint(x, y, 0.15f)
+        val action = FocusMeteringAction.Builder(point)
+            .setAutoCancelDuration(5, TimeUnit.SECONDS)
+            .build()
+
+        c.cameraControl.cancelFocusAndMetering()
+        val future = c.cameraControl.startFocusAndMetering(action)
+        future.addListener({
+            try {
+                val result = future.get()
+                binding.statusText.text = if (result.isFocusSuccessful) {
+                    "Focus locked"
+                } else {
+                    "Focus adjusted"
+                }
+            } catch (_: Throwable) {
+                binding.statusText.text = "Tap to focus"
+            }
+
+            binding.focusRing.animate()
+                .alpha(0f)
+                .setStartDelay(500)
+                .setDuration(300)
+                .withEndAction {
+                    binding.focusRing.visibility = View.GONE
+                    binding.focusRing.alpha = 1f
+                }
+                .start()
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun showFocusRing(x: Float, y: Float) {
+        binding.focusRing.animate().cancel()
+        binding.focusRing.alpha = 1f
+        binding.focusRing.scaleX = 0.72f
+        binding.focusRing.scaleY = 0.72f
+        binding.focusRing.visibility = View.VISIBLE
+
+        binding.focusRing.post {
+            binding.focusRing.x = x - binding.focusRing.width / 2f
+            binding.focusRing.y = y - binding.focusRing.height / 2f
+            binding.focusRing.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(140)
+                .start()
+        }
+    }
+
+    private fun formatZoom(value: Float): String = String.format(Locale.US, "%.1f", value)
+
     private fun freezeOrResume() {
-        if (binding.frozenImage.visibility == android.view.View.VISIBLE) {
+        if (binding.frozenImage.visibility == View.VISIBLE) {
             original = null
             enhanced = null
             showingEnhanced = false
-            binding.frozenImage.visibility = android.view.View.GONE
-            binding.previewView.visibility = android.view.View.VISIBLE
+            binding.frozenImage.visibility = View.GONE
+            binding.previewView.visibility = View.VISIBLE
+            binding.focusRing.visibility = View.GONE
             binding.freezeButton.text = "Freeze"
             binding.enhanceButton.isEnabled = false
             binding.toggleButton.isEnabled = false
-            binding.statusText.text = "Pinch to zoom • Tap to focus"
+            binding.statusText.text = "Slide up/down to zoom • Tap to focus"
             return
         }
 
@@ -114,8 +212,9 @@ class MainActivity : AppCompatActivity() {
         enhanced = null
         showingEnhanced = false
         binding.frozenImage.setImageBitmap(original)
-        binding.frozenImage.visibility = android.view.View.VISIBLE
-        binding.previewView.visibility = android.view.View.GONE
+        binding.frozenImage.visibility = View.VISIBLE
+        binding.previewView.visibility = View.GONE
+        binding.focusRing.visibility = View.GONE
         binding.freezeButton.text = "Resume"
         binding.enhanceButton.isEnabled = true
         binding.toggleButton.isEnabled = false
@@ -203,8 +302,6 @@ class MainActivity : AppCompatActivity() {
             Mode.DISTANCE -> 0.46f
         }
 
-        // Pass 1: brightness, contrast and saturation. This is intentionally
-        // simple arithmetic so it stays fast and predictable on the phone.
         for (i in 0 until count) {
             val p = input[i]
             val r0 = (p shr 16) and 0xff
@@ -222,9 +319,6 @@ class MainActivity : AppCompatActivity() {
             adjusted[i] = (0xff shl 24) or (r shl 16) or (g shl 8) or b
         }
 
-        // Keep the outside edge unchanged; sharpen the interior with a light
-        // Laplacian. Unlike the previous Canvas blend, this cannot create a
-        // transparent/blank result.
         adjusted.copyInto(output)
         for (y in 1 until height - 1) {
             val row = y * width
