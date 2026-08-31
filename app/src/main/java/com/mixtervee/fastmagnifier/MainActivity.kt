@@ -10,7 +10,6 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
-import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.ViewConfiguration
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,7 +32,6 @@ import kotlin.math.max
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
-    private lateinit var frozenScaleDetector: ScaleGestureDetector
     private var camera: Camera? = null
     private var original: Bitmap? = null
     private var enhanced: Bitmap? = null
@@ -50,10 +48,10 @@ class MainActivity : AppCompatActivity() {
     private var touchSlop = 12f
     private var enhanceRequestId = 0
 
+    private var frozenTouchDownY = 0f
+    private var frozenStartScale = 1f
     private var frozenScale = 1f
-    private var frozenLastX = 0f
-    private var frozenLastY = 0f
-    private var frozenDragging = false
+    private var frozenZoomGesture = false
 
     enum class Mode { TEXT, DETAIL, DISTANCE }
 
@@ -85,7 +83,7 @@ class MainActivity : AppCompatActivity() {
         }
         binding.toggleButton.setOnClickListener { toggleOriginalEnhanced() }
         binding.saveButton.setOnClickListener { saveCurrentPicture() }
-        binding.previewView.setOnTouchListener { _, event -> handleTouch(event) }
+        binding.previewView.setOnTouchListener { _, event -> handleLiveTouch(event) }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera()
@@ -95,67 +93,58 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupFrozenImageGestures() {
-        frozenScaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
-                frozenDragging = false
-                return true
-            }
-
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                val oldScale = frozenScale
-                frozenScale = (frozenScale * detector.scaleFactor).coerceIn(1f, 8f)
-                if (oldScale != frozenScale) {
-                    binding.frozenImage.pivotX = detector.focusX
-                    binding.frozenImage.pivotY = detector.focusY
-                    binding.frozenImage.scaleX = frozenScale
-                    binding.frozenImage.scaleY = frozenScale
-                    binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}× • drag to pan"
-                }
-                return true
-            }
-        })
-
         binding.frozenImage.setOnTouchListener { _, event ->
-            frozenScaleDetector.onTouchEvent(event)
-
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    frozenLastX = event.x
-                    frozenLastY = event.y
-                    frozenDragging = false
+                    frozenTouchDownY = event.y
+                    frozenStartScale = frozenScale
+                    frozenZoomGesture = false
                 }
 
                 MotionEvent.ACTION_MOVE -> {
-                    if (!frozenScaleDetector.isInProgress && frozenScale > 1f) {
-                        val dx = event.x - frozenLastX
-                        val dy = event.y - frozenLastY
-                        if (hypot(dx.toDouble(), dy.toDouble()) > 1.0) frozenDragging = true
-                        binding.frozenImage.translationX += dx
-                        binding.frozenImage.translationY += dy
-                        frozenLastX = event.x
-                        frozenLastY = event.y
+                    val dy = event.y - frozenTouchDownY
+                    if (!frozenZoomGesture && kotlin.math.abs(dy) > touchSlop * 1.25f) {
+                        frozenZoomGesture = true
+                    }
+
+                    if (frozenZoomGesture) {
+                        val height = max(binding.frozenImage.height.toFloat(), 1f)
+                        val verticalTravel = (frozenTouchDownY - event.y) / (height * 0.22f)
+                        frozenScale = (frozenStartScale * exp(verticalTravel.toDouble()).toFloat())
+                            .coerceIn(1f, 8f)
+                        applyFrozenScale()
+                        binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}×"
                     }
                 }
 
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (!frozenScaleDetector.isInProgress && !frozenDragging && frozenScale <= 1f) {
-                        binding.statusText.text = "Pinch to zoom • Save keeps full image"
+                    if (frozenZoomGesture) {
+                        binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}× • slide up/down"
+                    } else {
+                        binding.statusText.text = "Slide up/down to zoom • Save keeps full image"
                     }
+                    frozenZoomGesture = false
                 }
             }
             true
         }
     }
 
+    private fun applyFrozenScale() {
+        binding.frozenImage.pivotX = binding.frozenImage.width / 2f
+        binding.frozenImage.pivotY = binding.frozenImage.height / 2f
+        binding.frozenImage.scaleX = frozenScale
+        binding.frozenImage.scaleY = frozenScale
+    }
+
     private fun resetFrozenZoom() {
         frozenScale = 1f
-        frozenDragging = false
+        frozenStartScale = 1f
+        frozenZoomGesture = false
         binding.frozenImage.scaleX = 1f
         binding.frozenImage.scaleY = 1f
         binding.frozenImage.translationX = 0f
         binding.frozenImage.translationY = 0f
-        binding.frozenImage.pivotX = binding.frozenImage.width / 2f
-        binding.frozenImage.pivotY = binding.frozenImage.height / 2f
     }
 
     private fun startCamera() {
@@ -173,7 +162,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun liveHint(): String = "Slide up/down to zoom • Tap focus • Hold to freeze"
 
-    private fun handleTouch(event: MotionEvent): Boolean {
+    private fun handleLiveTouch(event: MotionEvent): Boolean {
         if (binding.frozenImage.visibility == View.VISIBLE) return true
 
         when (event.actionMasked) {
@@ -371,7 +360,7 @@ class MainActivity : AppCompatActivity() {
                     binding.toggleButton.isEnabled = true
                     binding.toggleButton.text = "Original"
                     binding.saveButton.isEnabled = true
-                    binding.statusText.text = "Enhanced in ${ms} ms • Pinch to zoom"
+                    binding.statusText.text = "Enhanced in ${ms} ms • Slide to zoom"
                 }
             } catch (t: Throwable) {
                 runOnUiThread {
@@ -392,9 +381,9 @@ class MainActivity : AppCompatActivity() {
         binding.frozenImage.setImageBitmap(if (showingEnhanced) e else original)
         binding.toggleButton.text = if (showingEnhanced) "Original" else "Enhanced"
         binding.statusText.text = if (showingEnhanced) {
-            "Enhanced • Pinch to zoom • Save available"
+            "Enhanced • Slide to zoom • Save available"
         } else {
-            "Original • Pinch to zoom • Save available"
+            "Original • Slide to zoom • Save available"
         }
     }
 
