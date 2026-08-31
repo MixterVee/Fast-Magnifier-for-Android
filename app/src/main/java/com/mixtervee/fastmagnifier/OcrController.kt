@@ -87,11 +87,11 @@ class OcrController(
         recognizer.close()
     }
 
-    private fun showResult(text: String) {
+    private fun showResult(recognizedText: String) {
         stopSpeech(updateStatus = false)
 
         val view = activity.layoutInflater.inflate(R.layout.dialog_ocr_result, null)
-        view.findViewById<TextView>(R.id.ocrResultText).text = text
+        view.findViewById<TextView>(R.id.ocrResultText).text = recognizedText
 
         val dialog = MaterialAlertDialogBuilder(activity)
             .setView(view)
@@ -99,10 +99,10 @@ class OcrController(
 
         speakButton = view.findViewById<MaterialButton>(R.id.ocrSpeakButton).apply {
             isEnabled = ttsReady
-            text = "Read Aloud"
+            this.text = "Read Aloud"
             setOnClickListener {
                 when {
-                    speechStopped -> startSpeech(text)
+                    speechStopped -> startSpeech(recognizedText)
                     speechPaused -> resumeSpeech()
                     else -> pauseSpeech()
                 }
@@ -115,13 +115,13 @@ class OcrController(
         }
 
         view.findViewById<MaterialButton>(R.id.ocrCopyButton).setOnClickListener {
-            copyText(text)
+            copyText(recognizedText)
         }
         view.findViewById<MaterialButton>(R.id.ocrSaveButton).setOnClickListener {
-            saveText(text)
+            saveText(recognizedText)
         }
         view.findViewById<MaterialButton>(R.id.ocrShareButton).setOnClickListener {
-            shareText(text)
+            shareText(recognizedText)
         }
         view.findViewById<MaterialButton>(R.id.ocrCloseButton).setOnClickListener {
             dialog.dismiss()
