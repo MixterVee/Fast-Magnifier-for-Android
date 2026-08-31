@@ -13,7 +13,7 @@ class PanZoomImageView @JvmOverloads constructor(
 ) : AppCompatImageView(context, attrs, defStyleAttr) {
 
     private companion object {
-        const val PAN_SENSITIVITY = 2.5f
+        const val PAN_SENSITIVITY = 5.0f
     }
 
     private var twoFingerGestureActive = false
