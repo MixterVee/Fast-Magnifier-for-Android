@@ -101,7 +101,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
             fadeOut()
             false
         } else {
-            showTemporarily(3500L)
+            showTemporarily(4500L)
             true
         }
     }
