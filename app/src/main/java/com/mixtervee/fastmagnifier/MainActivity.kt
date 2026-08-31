@@ -124,7 +124,7 @@ class MainActivity : AppCompatActivity() {
                     val c = camera ?: return true
                     val state = c.cameraInfo.zoomState.value ?: return true
                     val height = max(binding.previewView.height.toFloat(), 1f)
-                    val verticalTravel = (touchDownY - event.y) / (height * 0.55f)
+                    val verticalTravel = (touchDownY - event.y) / (height * 0.36f)
                     val target = (touchStartZoom * exp(verticalTravel.toDouble()).toFloat())
                         .coerceIn(state.minZoomRatio, state.maxZoomRatio)
                     c.cameraControl.setZoomRatio(target)
