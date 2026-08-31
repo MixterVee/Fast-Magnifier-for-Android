@@ -48,6 +48,7 @@ class MainActivity : AppCompatActivity() {
     private var touchSlop = 12f
     private var enhanceRequestId = 0
 
+    private var frozenTouchDownX = 0f
     private var frozenTouchDownY = 0f
     private var frozenStartScale = 1f
     private var frozenScale = 1f
@@ -102,6 +103,7 @@ class MainActivity : AppCompatActivity() {
         binding.frozenImage.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    frozenTouchDownX = event.x
                     frozenTouchDownY = event.y
                     frozenStartScale = frozenScale
                     frozenZoomGesture = false
@@ -119,18 +121,43 @@ class MainActivity : AppCompatActivity() {
                         frozenScale = (frozenStartScale * exp(verticalTravel.toDouble()).toFloat())
                             .coerceIn(1f, 8f)
                         applyFrozenScale()
-                        binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}×"
+                        binding.statusText.text = if (frozenScale > 1.01f) {
+                            "Frozen zoom ${formatZoom(frozenScale)}× • overview fades automatically"
+                        } else {
+                            "Frozen 1.0× • slide up to zoom"
+                        }
                     }
                 }
 
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_UP -> {
+                    val movement = hypot(
+                        (event.x - frozenTouchDownX).toDouble(),
+                        (event.y - frozenTouchDownY).toDouble()
+                    )
+
                     if (frozenZoomGesture) {
-                        binding.statusText.text =
-                            "Frozen zoom ${formatZoom(frozenScale)}× • 2-finger pan"
-                    } else {
-                        binding.statusText.text =
-                            "Slide up/down to zoom • 2-finger pan • Save keeps full image"
+                        binding.statusText.text = if (frozenScale > 1.01f) {
+                            "Frozen zoom ${formatZoom(frozenScale)}× • tap image for overview"
+                        } else {
+                            "Slide up/down to zoom • Save keeps full image"
+                        }
+                    } else if (movement <= touchSlop * 1.5) {
+                        if (frozenScale > 1.01f) {
+                            val shown = binding.navigatorView.toggleVisibility()
+                            binding.statusText.text = if (shown) {
+                                "Overview shown • drag the cyan box to move"
+                            } else {
+                                "Overview hidden • tap image to show"
+                            }
+                        } else {
+                            binding.navigatorView.hideImmediately()
+                            binding.statusText.text = "Slide up/down to zoom • Save keeps full image"
+                        }
                     }
+                    frozenZoomGesture = false
+                }
+
+                MotionEvent.ACTION_CANCEL -> {
                     frozenZoomGesture = false
                 }
             }
@@ -143,6 +170,16 @@ class MainActivity : AppCompatActivity() {
         binding.frozenImage.pivotY = binding.frozenImage.height / 2f
         binding.frozenImage.scaleX = frozenScale
         binding.frozenImage.scaleY = frozenScale
+
+        // Re-clamp after every scale change. This prevents a translation that was valid
+        // at high zoom from leaving the entire bitmap off-screen after zooming back out.
+        binding.frozenImage.clampPan()
+
+        if (frozenScale > 1.01f) {
+            binding.navigatorView.showTemporarily()
+        } else {
+            binding.navigatorView.hideImmediately()
+        }
     }
 
     private fun resetFrozenZoom() {
@@ -153,6 +190,7 @@ class MainActivity : AppCompatActivity() {
         binding.frozenImage.scaleY = 1f
         binding.frozenImage.translationX = 0f
         binding.frozenImage.translationY = 0f
+        binding.navigatorView.hideImmediately()
     }
 
     private fun startCamera() {
@@ -375,6 +413,7 @@ class MainActivity : AppCompatActivity() {
             enhanced = null
             showingEnhanced = false
             binding.frozenImage.setImageBitmap(original)
+            binding.frozenImage.clampPan()
             binding.toggleButton.isEnabled = false
             binding.statusText.text = "${modeLabel(newMode)} mode • Enhancing…"
             enhanceFrozen()
@@ -400,6 +439,7 @@ class MainActivity : AppCompatActivity() {
         resetFrozenZoom()
         binding.frozenImage.setImageBitmap(original)
         binding.frozenImage.visibility = View.VISIBLE
+        binding.navigatorView.hideImmediately()
         binding.previewView.visibility = View.GONE
         binding.focusRing.visibility = View.GONE
         binding.freezeButton.text = "Resume"
@@ -417,6 +457,7 @@ class MainActivity : AppCompatActivity() {
         enhanced = null
         showingEnhanced = false
         resetFrozenZoom()
+        binding.navigatorView.hideImmediately()
         binding.frozenImage.visibility = View.GONE
         binding.previewView.visibility = View.VISIBLE
         binding.focusRing.visibility = View.GONE
@@ -444,17 +485,19 @@ class MainActivity : AppCompatActivity() {
                     enhanced = out
                     showingEnhanced = true
                     binding.frozenImage.setImageBitmap(out)
+                    binding.frozenImage.clampPan()
                     binding.toggleButton.isEnabled = true
                     binding.toggleButton.text = "Original"
                     binding.saveButton.isEnabled = true
                     binding.statusText.text =
-                        "Enhanced in ${ms} ms • Slide zoom • 2-finger pan"
+                        "Enhanced in ${ms} ms • Slide zoom • tap image for overview"
                 }
             } catch (t: Throwable) {
                 runOnUiThread {
                     if (requestId != enhanceRequestId) return@runOnUiThread
                     showingEnhanced = false
                     binding.frozenImage.setImageBitmap(original)
+                    binding.frozenImage.clampPan()
                     binding.toggleButton.isEnabled = false
                     binding.saveButton.isEnabled = true
                     binding.statusText.text = "Enhance error: ${t.javaClass.simpleName}"
@@ -467,11 +510,12 @@ class MainActivity : AppCompatActivity() {
         val e = enhanced ?: return
         showingEnhanced = !showingEnhanced
         binding.frozenImage.setImageBitmap(if (showingEnhanced) e else original)
+        binding.frozenImage.clampPan()
         binding.toggleButton.text = if (showingEnhanced) "Original" else "Enhanced"
         binding.statusText.text = if (showingEnhanced) {
-            "Enhanced • Slide zoom • 2-finger pan • Save available"
+            "Enhanced • Slide zoom • tap image for overview • Save available"
         } else {
-            "Original • Slide zoom • 2-finger pan • Save available"
+            "Original • Slide zoom • tap image for overview • Save available"
         }
     }
 
