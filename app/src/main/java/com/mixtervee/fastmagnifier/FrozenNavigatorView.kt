@@ -42,6 +42,11 @@ class FrozenNavigatorView @JvmOverloads constructor(
     private val viewportRect = RectF()
     private var dragOffsetX = 0f
     private var dragOffsetY = 0f
+    private var dragging = false
+
+    private val hideRunnable = Runnable {
+        if (!dragging) fadeOut()
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -57,17 +62,68 @@ class FrozenNavigatorView @JvmOverloads constructor(
         canvas.drawBitmap(bitmap, null, imageRect, bitmapPaint)
         canvas.drawRect(imageRect, borderPaint)
 
-        val visible = target.visibleBitmapRectNormalized()
-        viewportRect.set(
-            imageRect.left + visible.left * imageRect.width(),
-            imageRect.top + visible.top * imageRect.height(),
-            imageRect.left + visible.right * imageRect.width(),
-            imageRect.top + visible.bottom * imageRect.height()
-        )
+        updateViewportRect(target)
         canvas.drawRect(viewportRect, viewportFillPaint)
         canvas.drawRect(viewportRect, viewportStrokePaint)
+    }
 
-        postInvalidateOnAnimation()
+    fun showTemporarily(autoHideMs: Long = 2200L): Boolean {
+        val target = targetImage()
+        if (target == null || target.visibility != VISIBLE || target.scaleX <= 1.01f) {
+            hideImmediately()
+            return false
+        }
+
+        removeCallbacks(hideRunnable)
+        animate().cancel()
+        if (visibility != VISIBLE) {
+            alpha = 0f
+            visibility = VISIBLE
+        }
+        animate().alpha(1f).setDuration(140L).start()
+        invalidate()
+
+        if (!dragging && autoHideMs > 0L) {
+            postDelayed(hideRunnable, autoHideMs)
+        }
+        return true
+    }
+
+    fun toggleVisibility(): Boolean {
+        val target = targetImage()
+        if (target == null || target.visibility != VISIBLE || target.scaleX <= 1.01f) {
+            hideImmediately()
+            return false
+        }
+
+        val isShowing = visibility == VISIBLE && alpha > 0.25f
+        return if (isShowing) {
+            fadeOut()
+            false
+        } else {
+            showTemporarily(3500L)
+            true
+        }
+    }
+
+    fun hideImmediately() {
+        removeCallbacks(hideRunnable)
+        dragging = false
+        animate().cancel()
+        alpha = 0f
+        visibility = INVISIBLE
+    }
+
+    private fun fadeOut() {
+        removeCallbacks(hideRunnable)
+        animate().cancel()
+        animate()
+            .alpha(0f)
+            .setDuration(220L)
+            .withEndAction {
+                if (!dragging && alpha <= 0.01f) visibility = INVISIBLE
+            }
+            .start()
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -78,6 +134,10 @@ class FrozenNavigatorView @JvmOverloads constructor(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                dragging = true
+                removeCallbacks(hideRunnable)
+                animate().cancel()
+                alpha = 1f
                 parent?.requestDisallowInterceptTouchEvent(true)
                 updateViewportRect(target)
                 if (viewportRect.contains(event.x, event.y)) {
@@ -99,7 +159,11 @@ class FrozenNavigatorView @JvmOverloads constructor(
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 moveTarget(target, event.x - dragOffsetX, event.y - dragOffsetY)
-                setStatus("Frozen zoom ${String.format(java.util.Locale.US, "%.1f", target.scaleX)}× • drag overview to pan")
+                dragging = false
+                setStatus(
+                    "Frozen zoom ${String.format(java.util.Locale.US, "%.1f", target.scaleX)}× • tap image to show overview"
+                )
+                postDelayed(hideRunnable, 2200L)
                 performClick()
                 return true
             }
@@ -111,6 +175,11 @@ class FrozenNavigatorView @JvmOverloads constructor(
     override fun performClick(): Boolean {
         super.performClick()
         return true
+    }
+
+    override fun onDetachedFromWindow() {
+        removeCallbacks(hideRunnable)
+        super.onDetachedFromWindow()
     }
 
     private fun moveTarget(target: PanZoomImageView, centerX: Float, centerY: Float) {
@@ -150,7 +219,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
         rootView.findViewById(R.id.frozenImage)
 
     private fun setStatus(message: String) {
-        rootView.findViewById<TextView>(R.id.statusText)?.text = message
+        rootView.findViewById<TextView?>(R.id.statusText)?.text = message
     }
 
     private fun dp(value: Float): Float = value * resources.displayMetrics.density
