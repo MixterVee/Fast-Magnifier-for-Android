@@ -47,6 +47,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var frozenTapDetector: GestureDetector
+    private lateinit var ocrController: OcrController
     private var camera: Camera? = null
     private var original: Bitmap? = null
     private var enhanced: Bitmap? = null
@@ -71,6 +72,7 @@ class MainActivity : AppCompatActivity() {
     private val areaUndoHistory = mutableListOf<AreaUndoStep>()
     private var areaEnhancePasses = 0
     private var areaEnhanceInProgress = false
+    private var ocrInProgress = false
 
     private var torchEnabled = false
 
@@ -93,6 +95,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         touchSlop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
+        ocrController = OcrController(this) { message -> binding.statusText.text = message }
 
         setupFrozenTapDetector()
         setupFrozenImageGestures()
@@ -105,6 +108,7 @@ class MainActivity : AppCompatActivity() {
         }
         binding.toggleButton.setOnClickListener { toggleOriginalEnhanced() }
         binding.undoButton.setOnClickListener { undoAreaEnhance() }
+        binding.readTextButton.setOnClickListener { readTextFromFrozen() }
         binding.saveButton.setOnClickListener { saveCurrentPicture() }
         binding.lightButton.setOnClickListener { toggleTorch() }
         binding.exposureSlider.addOnChangeListener { _, value, fromUser ->
@@ -247,6 +251,7 @@ class MainActivity : AppCompatActivity() {
         binding.frozenImage.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
         binding.toggleButton.isEnabled = false
         binding.undoButton.isEnabled = false
+        binding.readTextButton.isEnabled = false
         binding.saveButton.isEnabled = false
         binding.statusText.text =
             "Enhancing visible area… pass ${areaEnhancePasses + 1}/$MAX_AREA_ENHANCE_PASSES"
@@ -278,6 +283,7 @@ class MainActivity : AppCompatActivity() {
                     binding.toggleButton.isEnabled = true
                     binding.toggleButton.text = "Original"
                     binding.undoButton.isEnabled = true
+                    binding.readTextButton.isEnabled = !ocrInProgress
                     binding.saveButton.isEnabled = true
 
                     binding.statusText.text = if (areaEnhancePasses >= MAX_AREA_ENHANCE_PASSES) {
@@ -292,6 +298,7 @@ class MainActivity : AppCompatActivity() {
                     if (requestId != enhanceRequestId) return@runOnUiThread
                     binding.toggleButton.isEnabled = enhanced != null
                     binding.undoButton.isEnabled = areaUndoHistory.isNotEmpty()
+                    binding.readTextButton.isEnabled = !ocrInProgress && binding.frozenImage.visibility == View.VISIBLE
                     binding.saveButton.isEnabled = true
                     binding.statusText.text = "Area enhance error: ${t.javaClass.simpleName}"
                 }
@@ -338,6 +345,7 @@ class MainActivity : AppCompatActivity() {
         binding.toggleButton.isEnabled = true
         binding.toggleButton.text = "Original"
         binding.undoButton.isEnabled = areaUndoHistory.isNotEmpty()
+        binding.readTextButton.isEnabled = !ocrInProgress
         binding.saveButton.isEnabled = true
         binding.frozenImage.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
 
@@ -603,6 +611,7 @@ class MainActivity : AppCompatActivity() {
             binding.frozenImage.setImageBitmap(original)
             binding.frozenImage.clampPan()
             binding.toggleButton.isEnabled = false
+            binding.readTextButton.isEnabled = false
             binding.statusText.text = "${modeLabel(newMode)} mode • Enhancing…"
             enhanceFrozen()
         } else {
@@ -634,8 +643,10 @@ class MainActivity : AppCompatActivity() {
         binding.freezeButton.text = "Resume"
         binding.toggleButton.isEnabled = false
         binding.toggleButton.text = "Original"
+        binding.frozenToolsBar.visibility = View.VISIBLE
         binding.undoButton.visibility = View.VISIBLE
         binding.undoButton.isEnabled = false
+        binding.readTextButton.isEnabled = false
         binding.saveButton.isEnabled = true
         binding.exposureSlider.isEnabled = false
         binding.statusText.text = "Frozen • Enhancing…"
@@ -647,6 +658,7 @@ class MainActivity : AppCompatActivity() {
         original = null
         enhanced = null
         showingEnhanced = false
+        ocrInProgress = false
         resetAreaEnhanceHistory()
         resetFrozenZoom()
         binding.navigatorView.hideImmediately()
@@ -656,8 +668,10 @@ class MainActivity : AppCompatActivity() {
         binding.freezeButton.text = "Freeze + Enhance"
         binding.toggleButton.isEnabled = false
         binding.toggleButton.text = "Original"
+        binding.frozenToolsBar.visibility = View.GONE
         binding.undoButton.visibility = View.GONE
         binding.undoButton.isEnabled = false
+        binding.readTextButton.isEnabled = false
         binding.saveButton.isEnabled = false
         setupCameraControls()
         binding.statusText.text = liveHint()
@@ -668,6 +682,7 @@ class MainActivity : AppCompatActivity() {
         val selectedMode = mode
         val requestId = ++enhanceRequestId
         binding.toggleButton.isEnabled = false
+        binding.readTextButton.isEnabled = false
         val start = System.nanoTime()
 
         worker.execute {
@@ -685,6 +700,7 @@ class MainActivity : AppCompatActivity() {
                     binding.frozenImage.clampPan()
                     binding.toggleButton.isEnabled = true
                     binding.toggleButton.text = "Original"
+                    binding.readTextButton.isEnabled = !ocrInProgress
                     binding.saveButton.isEnabled = true
                     binding.statusText.text =
                         "Enhanced in ${ms} ms • Slide zoom • double-tap zoomed area to enhance"
@@ -696,6 +712,7 @@ class MainActivity : AppCompatActivity() {
                     binding.frozenImage.setImageBitmap(original)
                     binding.frozenImage.clampPan()
                     binding.toggleButton.isEnabled = false
+                    binding.readTextButton.isEnabled = !ocrInProgress
                     binding.saveButton.isEnabled = true
                     binding.statusText.text = "Enhance error: ${t.javaClass.simpleName}"
                 }
@@ -714,6 +731,41 @@ class MainActivity : AppCompatActivity() {
         } else {
             "Original • Slide zoom • tap Enhanced before area enhancement • Save available"
         }
+    }
+
+    private fun readTextFromFrozen() {
+        if (ocrInProgress || binding.frozenImage.visibility != View.VISIBLE) return
+
+        val source = if (showingEnhanced) enhanced ?: original else original
+        if (source == null) {
+            binding.statusText.text = "Nothing available to read"
+            return
+        }
+
+        val zoomed = frozenScale > 1.01f
+        val ocrBitmap = if (zoomed) cropVisibleBitmap(source) else source
+        val sourceLabel = if (zoomed) "visible area" else "full image"
+
+        ocrInProgress = true
+        binding.navigatorView.hideImmediately()
+        binding.readTextButton.isEnabled = false
+        binding.statusText.text = "Reading text from $sourceLabel…"
+
+        ocrController.recognize(ocrBitmap, sourceLabel) {
+            ocrInProgress = false
+            if (binding.frozenImage.visibility == View.VISIBLE) {
+                binding.readTextButton.isEnabled = !areaEnhanceInProgress
+            }
+        }
+    }
+
+    private fun cropVisibleBitmap(source: Bitmap): Bitmap {
+        val visible = binding.frozenImage.visibleBitmapRectNormalized()
+        val left = (visible.left * source.width).toInt().coerceIn(0, source.width - 1)
+        val top = (visible.top * source.height).toInt().coerceIn(0, source.height - 1)
+        val right = (visible.right * source.width).toInt().coerceIn(left + 1, source.width)
+        val bottom = (visible.bottom * source.height).toInt().coerceIn(top + 1, source.height)
+        return Bitmap.createBitmap(source, left, top, right - left, bottom - top)
     }
 
     private fun saveCurrentPicture() {
@@ -868,6 +920,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         mainHandler.removeCallbacks(longPressRunnable)
+        if (::ocrController.isInitialized) ocrController.close()
         worker.shutdownNow()
         super.onDestroy()
     }
