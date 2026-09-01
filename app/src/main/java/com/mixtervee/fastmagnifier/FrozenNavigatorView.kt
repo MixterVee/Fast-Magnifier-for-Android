@@ -95,10 +95,8 @@ class FrozenNavigatorView @JvmOverloads constructor(
 
         removeCallbacks(hideRunnable)
         animate().cancel()
-        if (visibility != VISIBLE) {
-            alpha = 0f
-            visibility = VISIBLE
-        }
+        alpha = 1f
+        visibility = VISIBLE
 
         if (inFullView) {
             fullViewOverviewButton()?.visibility = GONE
@@ -113,7 +111,6 @@ class FrozenNavigatorView @JvmOverloads constructor(
             bringToFront()
         }
 
-        animate().alpha(1f).setDuration(140L).start()
         invalidate()
 
         if (!dragging && autoHideMs > 0L) {
@@ -122,14 +119,26 @@ class FrozenNavigatorView @JvmOverloads constructor(
         return true
     }
 
-    fun showForManualTap(): Boolean = showTemporarily(manualShowMs)
+    /**
+     * MainActivity still calls this legacy entry point for a confirmed tap on the
+     * frozen image. Under the v1.3 interaction model, that tap means Full View at
+     * every zoom level; the overview itself is summoned only by the dedicated
+     * Overview control while Full View is active.
+     */
+    fun showForManualTap(): Boolean {
+        if (!isFullViewActive() && targetImage()?.visibility == VISIBLE) {
+            hideImmediately()
+            rootView.findViewById<View>(R.id.fullViewButton)?.performClick()
+            return true
+        }
+        return false
+    }
 
     fun showForFullView(): Boolean = showTemporarily(
         autoHideMs = manualShowMs,
         allowInFullView = true
     )
 
-    // Kept for compatibility with older call sites; a tap now always refreshes visibility.
     fun toggleVisibility(): Boolean = showForManualTap()
 
     fun hideImmediately() {
@@ -142,18 +151,9 @@ class FrozenNavigatorView @JvmOverloads constructor(
     }
 
     private fun fadeOut() {
-        removeCallbacks(hideRunnable)
-        animate().cancel()
-        animate()
-            .alpha(0f)
-            .setDuration(220L)
-            .withEndAction {
-                if (!dragging && alpha <= 0.01f) {
-                    visibility = INVISIBLE
-                    finishFullViewOverviewState()
-                }
-            }
-            .start()
+        // Keep the navigator state deterministic. Animated fade-outs could leave the
+        // view VISIBLE with alpha 0 when a new show request arrived during cancellation.
+        hideImmediately()
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
