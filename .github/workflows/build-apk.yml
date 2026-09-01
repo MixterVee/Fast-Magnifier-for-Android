@@ -27,11 +27,11 @@ jobs:
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Fast-Magnifier-v1.2.2-debug.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk Fast-Magnifier-v1.3-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Fast-Magnifier-v1.2.2-APK
-          path: Fast-Magnifier-v1.2.2-debug.apk
+          name: Fast-Magnifier-v1.3-APK
+          path: Fast-Magnifier-v1.3-debug.apk
           if-no-files-found: error
