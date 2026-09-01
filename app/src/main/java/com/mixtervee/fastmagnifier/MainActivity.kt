@@ -213,7 +213,7 @@ class MainActivity : AppCompatActivity() {
             binding.statusText.text = "Overview shown"
         } else {
             binding.navigatorView.hideImmediately()
-            binding.statusText.text = "Frozen 1.0×"
+            binding.fullViewButton.performClick()
         }
     }
 
