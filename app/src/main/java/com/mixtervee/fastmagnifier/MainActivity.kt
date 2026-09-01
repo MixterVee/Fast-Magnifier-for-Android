@@ -182,7 +182,7 @@ class MainActivity : AppCompatActivity() {
 
                     if (frozenZoomGesture) {
                         val height = max(binding.frozenImage.height.toFloat(), 1f)
-                        val verticalTravel = (frozenTouchDownY - event.y) / (height * 0.22f)
+                        val verticalTravel = (frozenTouchDownY - event.y) / (height * 0.16f)
                         frozenScale = (frozenStartScale * exp(verticalTravel.toDouble()).toFloat())
                             .coerceIn(1f, 8f)
                         applyFrozenScale()
