@@ -85,6 +85,7 @@ class GuidanceTextView @JvmOverloads constructor(
             "tap focus",
             "tap image",
             "tap overview",
+            "tap full view",
             "tap to show",
             "double-tap",
             "hold to freeze",
@@ -132,10 +133,13 @@ class GuidanceTextView @JvmOverloads constructor(
             actions += "Tap Overview"
             if (!maxReached) actions += "Double-tap Enhance"
             if (canRead) actions += "Read Text (view)"
-        } else if (canRead) {
-            actions += "Read Text (full image)"
         } else {
-            actions += "OCR after enhancement"
+            actions += "Tap Full View"
+            if (canRead) {
+                actions += "Read Text (full image)"
+            } else {
+                actions += "OCR after enhancement"
+            }
         }
 
         if (canUndo) actions += "Undo"
