@@ -2,6 +2,7 @@ package com.mixtervee.fastmagnifier
 
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.graphics.Rect
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
@@ -29,6 +30,7 @@ class HighResCaptureController(
     }
 
     fun capture(
+        targetAspectRatio: Float,
         onReady: (Bitmap) -> Unit,
         onError: (ImageCaptureException) -> Unit
     ) {
@@ -40,8 +42,10 @@ class HighResCaptureController(
                 override fun onCaptureSuccess(image: ImageProxy) {
                     try {
                         val raw = image.toBitmap()
-                        val oriented = rotate(raw, image.imageInfo.rotationDegrees)
-                        val working = scaleForQuality(oriented)
+                        val cameraCropped = cropToImageCropRect(raw, image.cropRect)
+                        val oriented = rotate(cameraCropped, image.imageInfo.rotationDegrees)
+                        val framed = cropToAspectRatio(oriented, targetAspectRatio)
+                        val working = scaleForQuality(framed)
                         mainExecutor.execute { onReady(working) }
                     } catch (t: Throwable) {
                         val wrapped = ImageCaptureException(
@@ -65,6 +69,40 @@ class HighResCaptureController(
     fun close() {
         imageCapture = null
         captureExecutor.shutdownNow()
+    }
+
+    private fun cropToImageCropRect(source: Bitmap, requested: Rect): Bitmap {
+        val left = requested.left.coerceIn(0, source.width - 1)
+        val top = requested.top.coerceIn(0, source.height - 1)
+        val right = requested.right.coerceIn(left + 1, source.width)
+        val bottom = requested.bottom.coerceIn(top + 1, source.height)
+
+        if (left == 0 && top == 0 && right == source.width && bottom == source.height) {
+            return source
+        }
+
+        return Bitmap.createBitmap(source, left, top, right - left, bottom - top)
+    }
+
+    private fun cropToAspectRatio(source: Bitmap, targetAspectRatio: Float): Bitmap {
+        if (targetAspectRatio <= 0f || source.width <= 0 || source.height <= 0) return source
+
+        val currentAspect = source.width.toFloat() / source.height.toFloat()
+        if (kotlin.math.abs(currentAspect - targetAspectRatio) < 0.002f) return source
+
+        return if (currentAspect > targetAspectRatio) {
+            val cropWidth = (source.height * targetAspectRatio)
+                .toInt()
+                .coerceIn(1, source.width)
+            val left = ((source.width - cropWidth) / 2).coerceAtLeast(0)
+            Bitmap.createBitmap(source, left, 0, cropWidth, source.height)
+        } else {
+            val cropHeight = (source.width / targetAspectRatio)
+                .toInt()
+                .coerceIn(1, source.height)
+            val top = ((source.height - cropHeight) / 2).coerceAtLeast(0)
+            Bitmap.createBitmap(source, 0, top, source.width, cropHeight)
+        }
     }
 
     private fun rotate(source: Bitmap, degrees: Int): Bitmap {
