@@ -1,5 +1,8 @@
 package com.mixtervee.fastmagnifier
 
+import android.graphics.Bitmap
+import android.view.WindowManager
+import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
@@ -8,11 +11,17 @@ class SettingsController(
     private val settings: AppSettings,
     private val status: (String) -> Unit,
     private val onOverviewChanged: () -> Unit,
-    private val onSpeechRateChanged: () -> Unit,
-    private val onKeepScreenAwakeChanged: () -> Unit,
-    private val recentCaptureCount: () -> Int,
-    private val onRecentCaptures: () -> Unit
+    private val onSpeechRateChanged: () -> Unit
 ) {
+    private val recentCaptures = RecentCapturesController(
+        activity = activity,
+        status = status,
+        onSelected = { bitmap -> showRecentCapture(bitmap) }
+    )
+
+    init {
+        applyKeepScreenAwake()
+    }
 
     fun show() {
         val items = arrayOf(
@@ -20,7 +29,7 @@ class SettingsController(
             "Area enhance  •  ${settings.areaEnhanceLabel}",
             "Read aloud speed  •  ${settings.speechRateLabel}",
             "Keep screen awake  •  ${settings.keepScreenAwakeLabel}",
-            "Recent captures  •  ${recentCaptureCount()}",
+            "Recent captures  •  ${recentCaptures.count()}",
             "Restore defaults"
         )
 
@@ -33,7 +42,7 @@ class SettingsController(
                     1 -> showAreaEnhanceSettings()
                     2 -> showSpeechRateSettings()
                     3 -> showKeepScreenAwakeSettings()
-                    4 -> onRecentCaptures()
+                    4 -> recentCaptures.show()
                     5 -> confirmReset()
                 }
             }
@@ -105,11 +114,36 @@ class SettingsController(
             .setTitle("Keep screen awake")
             .setSingleChoiceItems(choices, selected) { dialog, which ->
                 settings.keepScreenAwake = which == 1
-                onKeepScreenAwakeChanged()
+                applyKeepScreenAwake()
                 status("Keep screen awake: ${settings.keepScreenAwakeLabel}")
                 dialog.dismiss()
             }
             .setNegativeButton("Back") { _, _ -> show() }
+            .show()
+    }
+
+    private fun applyKeepScreenAwake() {
+        if (settings.keepScreenAwake) {
+            activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    private fun showRecentCapture(bitmap: Bitmap) {
+        val padding = (16f * activity.resources.displayMetrics.density).toInt()
+        val image = ImageView(activity).apply {
+            setImageBitmap(bitmap)
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setPadding(padding, padding, padding, padding)
+            contentDescription = "Recent magnifier capture"
+        }
+
+        MaterialAlertDialogBuilder(activity)
+            .setTitle("Recent capture")
+            .setView(image)
+            .setPositiveButton("Close", null)
             .show()
     }
 
@@ -121,7 +155,7 @@ class SettingsController(
                 settings.resetDefaults()
                 onOverviewChanged()
                 onSpeechRateChanged()
-                onKeepScreenAwakeChanged()
+                applyKeepScreenAwake()
                 status("Settings restored to defaults")
             }
             .setNegativeButton("Cancel") { _, _ -> show() }
