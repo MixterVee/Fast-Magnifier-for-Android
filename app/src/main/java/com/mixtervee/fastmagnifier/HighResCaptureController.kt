@@ -1,5 +1,6 @@
 package com.mixtervee.fastmagnifier
 
+import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.Rect
@@ -27,6 +28,24 @@ class HighResCaptureController(
             .setTargetRotation(targetRotation)
             .build()
             .also { imageCapture = it }
+    }
+
+    /**
+     * Existing call path used by MainActivity. Match the replacement still to the
+     * current screen/PreviewView shape so a live-camera zoom does not appear to
+     * jump back to a wider 4:3 sensor view when the hi-res frame arrives.
+     */
+    fun capture(
+        onReady: (Bitmap) -> Unit,
+        onError: (ImageCaptureException) -> Unit
+    ) {
+        val metrics = Resources.getSystem().displayMetrics
+        val targetAspectRatio = if (metrics.heightPixels > 0) {
+            metrics.widthPixels.toFloat() / metrics.heightPixels.toFloat()
+        } else {
+            0f
+        }
+        capture(targetAspectRatio, onReady, onError)
     }
 
     fun capture(
