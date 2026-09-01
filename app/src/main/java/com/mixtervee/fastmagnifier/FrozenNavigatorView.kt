@@ -99,7 +99,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
         visibility = VISIBLE
 
         if (inFullView) {
-            fullViewOverviewButton()?.visibility = GONE
+            fullViewOverviewHotspot()?.visibility = GONE
             fullViewOverviewDismissLayer()?.apply {
                 visibility = VISIBLE
                 isClickable = true
@@ -123,7 +123,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
      * MainActivity still calls this legacy entry point for a confirmed tap on the
      * frozen image. Under the v1.3 interaction model, that tap means Full View at
      * every zoom level; the overview itself is summoned only by the dedicated
-     * Overview control while Full View is active.
+     * Overview hotspot while Full View is active.
      */
     fun showForManualTap(): Boolean {
         if (!isFullViewActive() && targetImage()?.visibility == VISIBLE) {
@@ -251,8 +251,8 @@ class FrozenNavigatorView @JvmOverloads constructor(
     private fun isFullViewActive(): Boolean =
         rootView.findViewById<View>(R.id.fullViewRestoreLayer)?.visibility == VISIBLE
 
-    private fun fullViewOverviewButton(): View? =
-        rootView.findViewById(R.id.fullViewOverviewButton)
+    private fun fullViewOverviewHotspot(): View? =
+        rootView.findViewById(R.id.fullViewOverviewHotspot)
 
     private fun fullViewOverviewDismissLayer(): View? =
         rootView.findViewById(R.id.fullViewOverviewDismissLayer)
@@ -267,7 +267,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
         val target = targetImage() ?: return
         if (target.visibility != VISIBLE || target.scaleX <= 1.01f) return
 
-        fullViewOverviewButton()?.apply {
+        fullViewOverviewHotspot()?.apply {
             visibility = VISIBLE
             bringToFront()
         }
