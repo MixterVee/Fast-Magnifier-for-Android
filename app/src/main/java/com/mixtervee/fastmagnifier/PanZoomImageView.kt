@@ -5,8 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.util.AttributeSet
-import android.view.GestureDetector
-import android.view.MotionEvent
 import android.view.View
 import androidx.appcompat.widget.AppCompatImageView
 import kotlin.math.max
@@ -19,45 +17,6 @@ class PanZoomImageView @JvmOverloads constructor(
 ) : AppCompatImageView(context, attrs, defStyleAttr) {
 
     private var bitmapSwapGeneration = 0
-
-    private val fullViewTapDetector = GestureDetector(
-        context,
-        object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDown(e: MotionEvent): Boolean = true
-
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                if (visibility != View.VISIBLE) return false
-
-                val restoreLayer = rootView.findViewById<View>(R.id.fullViewRestoreLayer)
-                if (restoreLayer?.visibility == View.VISIBLE) return true
-
-                (rootView.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)
-                    ?.hideImmediately()
-                rootView.findViewById<View>(R.id.fullViewButton)?.performClick()
-                return true
-            }
-
-            // MainActivity owns the existing double-tap area-enhance action.
-            override fun onDoubleTap(e: MotionEvent): Boolean = true
-        }
-    )
-
-    /**
-     * MainActivity still owns frozen zoom and double-tap enhancement. We wrap its listener
-     * only to give a confirmed single tap one consistent meaning: Full View at any zoom.
-     */
-    override fun setOnTouchListener(l: View.OnTouchListener?) {
-        if (l == null) {
-            super.setOnTouchListener(null)
-            return
-        }
-
-        super.setOnTouchListener { view, event ->
-            val handled = l.onTouch(view, event)
-            fullViewTapDetector.onTouchEvent(event)
-            handled
-        }
-    }
 
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
