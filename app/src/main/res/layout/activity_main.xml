@@ -84,6 +84,23 @@
             android:value="0"
             android:valueFrom="-1"
             android:valueTo="1" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/settingsButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="4dp"
+            android:contentDescription="Settings"
+            android:gravity="center"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:text=""
+            app:icon="@drawable/ic_settings"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="20dp"
+            app:iconTint="@color/white" />
     </LinearLayout>
 
     <com.mixtervee.fastmagnifier.FrozenNavigatorView
