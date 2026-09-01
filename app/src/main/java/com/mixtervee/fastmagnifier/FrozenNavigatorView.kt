@@ -21,8 +21,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
 
     private companion object {
         const val DEFAULT_SHOW_MS = 2200L
-        const val MANUAL_SHOW_MS = 4500L
-        const val AFTER_DRAG_SHOW_MS = 3500L
+        const val DEFAULT_MANUAL_SHOW_MS = 4500L
     }
 
     private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -49,6 +48,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
     private var dragOffsetX = 0f
     private var dragOffsetY = 0f
     private var dragging = false
+    private var manualShowMs = DEFAULT_MANUAL_SHOW_MS
 
     private val hideRunnable = Runnable {
         if (!dragging) fadeOut()
@@ -73,6 +73,10 @@ class FrozenNavigatorView @JvmOverloads constructor(
         canvas.drawRect(viewportRect, viewportStrokePaint)
     }
 
+    fun setManualShowDuration(durationMs: Long) {
+        manualShowMs = durationMs.coerceIn(2500L, 10000L)
+    }
+
     fun showTemporarily(autoHideMs: Long = DEFAULT_SHOW_MS): Boolean {
         val target = targetImage()
         if (target == null || target.visibility != VISIBLE || target.scaleX <= 1.01f) {
@@ -95,12 +99,10 @@ class FrozenNavigatorView @JvmOverloads constructor(
         return true
     }
 
-    /**
-     * A tap on the frozen image should always make the navigator easier to use.
-     * If it is already visible or fading, refresh it and restart the timer rather
-     * than interpreting the tap as a request to hide it.
-     */
-    fun toggleVisibility(): Boolean = showTemporarily(MANUAL_SHOW_MS)
+    fun showForManualTap(): Boolean = showTemporarily(manualShowMs)
+
+    // Kept for compatibility with older call sites; a tap now always refreshes visibility.
+    fun toggleVisibility(): Boolean = showForManualTap()
 
     fun hideImmediately() {
         removeCallbacks(hideRunnable)
@@ -144,7 +146,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
                     dragOffsetY = 0f
                 }
                 moveTarget(target, event.x - dragOffsetX, event.y - dragOffsetY)
-                setStatus("Drag the cyan box to move around the image")
+                setStatus("Moving overview")
                 return true
             }
 
@@ -156,11 +158,10 @@ class FrozenNavigatorView @JvmOverloads constructor(
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 moveTarget(target, event.x - dragOffsetX, event.y - dragOffsetY)
                 dragging = false
-                setStatus(
-                    "Frozen zoom ${String.format(java.util.Locale.US, "%.1f", target.scaleX)}× • tap image to show overview"
-                )
+                setStatus("Overview moved")
                 removeCallbacks(hideRunnable)
-                postDelayed(hideRunnable, AFTER_DRAG_SHOW_MS)
+                val afterDragMs = (manualShowMs - 1000L).coerceAtLeast(2500L)
+                postDelayed(hideRunnable, afterDragMs)
                 performClick()
                 return true
             }
