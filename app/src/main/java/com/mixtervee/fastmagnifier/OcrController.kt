@@ -34,6 +34,7 @@ class OcrController(
 
     private var textToSpeech: TextToSpeech? = null
     private var ttsReady = false
+    private var speechRate = 1f
     private var speechChunks: List<String> = emptyList()
     private var speechIndex = 0
     private var speechPaused = false
@@ -48,6 +49,7 @@ class OcrController(
                 val engine = textToSpeech
                 val languageResult = engine?.setLanguage(Locale.getDefault())
                     ?: TextToSpeech.LANG_NOT_SUPPORTED
+                engine?.setSpeechRate(speechRate)
                 ttsReady = languageResult != TextToSpeech.LANG_MISSING_DATA &&
                     languageResult != TextToSpeech.LANG_NOT_SUPPORTED
                 installSpeechListener()
@@ -58,6 +60,11 @@ class OcrController(
                 speakButton?.isEnabled = ttsReady
             }
         }
+    }
+
+    fun setSpeechRate(rate: Float) {
+        speechRate = rate.coerceIn(0.5f, 2f)
+        textToSpeech?.setSpeechRate(speechRate)
     }
 
     fun recognize(bitmap: android.graphics.Bitmap, sourceLabel: String, onFinished: () -> Unit) {
@@ -177,6 +184,7 @@ class OcrController(
         speechChunks = chunkForSpeech(text)
         if (speechChunks.isEmpty()) return
 
+        textToSpeech?.setSpeechRate(speechRate)
         speechSession++
         speechIndex = 0
         speechPaused = false
