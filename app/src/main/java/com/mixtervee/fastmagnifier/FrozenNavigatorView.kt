@@ -97,20 +97,6 @@ class FrozenNavigatorView @JvmOverloads constructor(
         animate().cancel()
         alpha = 1f
         visibility = VISIBLE
-
-        if (inFullView) {
-            fullViewOverviewHotspot()?.visibility = GONE
-            fullViewOverviewDismissLayer()?.apply {
-                visibility = VISIBLE
-                isClickable = true
-                isFocusable = true
-                bringToFront()
-                setOnClickListener { hideImmediately() }
-            }
-            // The navigator sits above its dedicated dismiss surface.
-            bringToFront()
-        }
-
         invalidate()
 
         if (!dragging && autoHideMs > 0L) {
@@ -120,24 +106,50 @@ class FrozenNavigatorView @JvmOverloads constructor(
     }
 
     /**
-     * MainActivity still calls this legacy entry point for a confirmed tap on the
-     * frozen image. Under the v1.3 interaction model, that tap means Full View at
-     * every zoom level; the overview itself is summoned only by the dedicated
-     * Overview hotspot while Full View is active.
+     * A confirmed tap on the main frozen image always means Full View under the
+     * v1.3 interaction model. Do not depend on stale overlay state here; the full
+     * screen overlays themselves own all taps once Full View is active.
      */
     fun showForManualTap(): Boolean {
-        if (!isFullViewActive() && targetImage()?.visibility == VISIBLE) {
-            hideImmediately()
-            rootView.findViewById<View>(R.id.fullViewButton)?.performClick()
-            return true
-        }
-        return false
+        if (targetImage()?.visibility != VISIBLE) return false
+
+        hideImmediately()
+        rootView.findViewById<View>(R.id.fullViewButton)?.performClick()
+        return true
     }
 
-    fun showForFullView(): Boolean = showTemporarily(
-        autoHideMs = manualShowMs,
-        allowInFullView = true
-    )
+    /**
+     * Dedicated Full View overview path. This deliberately does not route through
+     * showTemporarily()/isFullViewActive() so a stale overlay flag cannot suppress
+     * a valid tap on the Full View Overview control.
+     */
+    fun showForFullView(): Boolean {
+        val target = targetImage()
+        if (target == null || target.visibility != VISIBLE || target.scaleX <= 1.01f) {
+            return false
+        }
+
+        removeCallbacks(hideRunnable)
+        animate().cancel()
+        dragging = false
+        alpha = 1f
+        visibility = VISIBLE
+
+        fullViewOverviewHotspot()?.visibility = GONE
+        fullViewOverviewDismissLayer()?.apply {
+            visibility = VISIBLE
+            isClickable = true
+            isFocusable = true
+            bringToFront()
+            setOnClickListener { hideImmediately() }
+        }
+
+        // Keep the navigator above its dedicated dismiss layer.
+        bringToFront()
+        invalidate()
+        postDelayed(hideRunnable, manualShowMs)
+        return true
+    }
 
     fun toggleVisibility(): Boolean = showForManualTap()
 
