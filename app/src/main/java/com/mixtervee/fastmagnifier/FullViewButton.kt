@@ -1,26 +1,25 @@
 package com.mixtervee.fastmagnifier
 
 import android.content.Context
-import android.content.res.ColorStateList
-import android.graphics.Color
 import android.util.AttributeSet
 import android.view.View
-import androidx.constraintlayout.widget.ConstraintLayout
 import com.google.android.material.button.MaterialButton
 
 /**
  * Hides all app chrome so the camera/frozen image can be viewed unobstructed.
- * A transparent restore layer consumes taps outside the dedicated overview button.
+ *
+ * Full View uses two completely separate touch surfaces:
+ * - fullViewRestoreLayer exits Full View when no overview is open.
+ * - fullViewOverviewDismissLayer closes only the overview while it is open.
+ *
+ * Keeping those paths physically separate prevents an overview-dismiss tap from
+ * ever falling through to the Full View exit action.
  */
 class FullViewButton @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = com.google.android.material.R.attr.materialButtonStyle
 ) : MaterialButton(context, attrs, defStyleAttr) {
-
-    companion object {
-        const val OVERVIEW_BUTTON_TAG = "fast_magnifier_full_view_overview"
-    }
 
     init {
         setOnClickListener { enterFullView() }
@@ -37,109 +36,52 @@ class FullViewButton @JvmOverloads constructor(
         root.findViewById<View>(R.id.frozenToolsBar)?.visibility = View.GONE
         root.findViewById<View>(R.id.bottomBar)?.visibility = View.GONE
 
+        root.findViewById<View>(R.id.fullViewOverviewDismissLayer)?.apply {
+            visibility = View.GONE
+            setOnClickListener {
+                (root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)
+                    ?.hideImmediately()
+            }
+        }
+
         root.findViewById<View>(R.id.fullViewRestoreLayer)?.apply {
             visibility = View.VISIBLE
             isClickable = true
             isFocusable = true
             bringToFront()
-            setOnClickListener { handleFullViewBackgroundTap() }
+            setOnClickListener { restoreControls() }
         }
 
         val frozenImage = root.findViewById<View>(R.id.frozenImage)
         val showOverviewButton =
-            frozenImage?.visibility == View.VISIBLE && (frozenImage.scaleX > 1.01f)
+            frozenImage?.visibility == View.VISIBLE && frozenImage.scaleX > 1.01f
 
-        ensureOverviewButton().apply {
+        root.findViewById<MaterialButton>(R.id.fullViewOverviewButton)?.apply {
+            setOnClickListener {
+                (root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)
+                    ?.showForFullView()
+            }
             visibility = if (showOverviewButton) View.VISIBLE else View.GONE
             if (showOverviewButton) bringToFront()
-        }
-    }
-
-    /**
-     * If the navigator is currently open, the first background tap dismisses only
-     * the navigator and leaves Full View active. This prevents a navigator-dismiss
-     * tap from also triggering the Full View exit path. A later background tap,
-     * with the navigator already hidden, restores the normal controls.
-     */
-    private fun handleFullViewBackgroundTap() {
-        val root = rootView
-        val navigator = root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView
-
-        if (navigator?.visibility == View.VISIBLE) {
-            navigator.hideImmediately()
-            return
-        }
-
-        restoreControls()
-    }
-
-    private fun ensureOverviewButton(): MaterialButton {
-        val root = rootView as? ConstraintLayout
-            ?: error("Fast Magnifier root must be ConstraintLayout")
-
-        root.findViewWithTag<MaterialButton>(OVERVIEW_BUTTON_TAG)?.let { return it }
-
-        return MaterialButton(
-            context,
-            null,
-            com.google.android.material.R.attr.materialButtonStyle
-        ).apply {
-            tag = OVERVIEW_BUTTON_TAG
-            id = View.generateViewId()
-            contentDescription = "Show overview"
-            text = ""
-            minimumWidth = 0
-            minimumHeight = 0
-            setPadding(0, 0, 0, 0)
-            alpha = 0.78f
-            cornerRadius = dp(12)
-            strokeWidth = dp(1)
-            strokeColor = ColorStateList.valueOf(Color.argb(180, 255, 255, 255))
-            backgroundTintList = ColorStateList.valueOf(Color.argb(175, 10, 16, 24))
-            setIconResource(R.drawable.ic_overview)
-            iconTint = ColorStateList.valueOf(Color.WHITE)
-            iconPadding = 0
-            iconSize = dp(22)
-            iconGravity = ICON_GRAVITY_TEXT_START
-            visibility = View.GONE
-
-            layoutParams = ConstraintLayout.LayoutParams(dp(48), dp(48)).apply {
-                endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
-                bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
-                marginEnd = dp(16)
-                bottomMargin = dp(16)
-            }
-
-            setOnClickListener {
-                visibility = View.GONE
-                val navigator = rootView.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView
-                if (navigator?.showForFullView() != true) {
-                    val restoreLayer = rootView.findViewById<View>(R.id.fullViewRestoreLayer)
-                    val frozen = rootView.findViewById<View>(R.id.frozenImage)
-                    if (
-                        restoreLayer?.visibility == View.VISIBLE &&
-                        frozen?.visibility == View.VISIBLE &&
-                        frozen.scaleX > 1.01f
-                    ) {
-                        visibility = View.VISIBLE
-                        bringToFront()
-                    }
-                }
-            }
-
-            root.addView(this)
         }
     }
 
     private fun restoreControls() {
         val root = rootView
 
-        root.findViewWithTag<View>(OVERVIEW_BUTTON_TAG)?.visibility = View.GONE
-
+        // Disable all Full View overlays before hiding the navigator so its cleanup
+        // cannot recreate any Full View controls during the transition back.
+        root.findViewById<View>(R.id.fullViewOverviewButton)?.visibility = View.GONE
+        root.findViewById<View>(R.id.fullViewOverviewDismissLayer)?.apply {
+            visibility = View.GONE
+            setOnClickListener(null)
+        }
         root.findViewById<View>(R.id.fullViewRestoreLayer)?.apply {
             visibility = View.GONE
             setOnClickListener(null)
         }
+
+        (root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)?.hideImmediately()
 
         root.findViewById<View>(R.id.cameraToolsBar)?.visibility = View.VISIBLE
         root.findViewById<View>(R.id.statusText)?.visibility = View.VISIBLE
@@ -151,11 +93,5 @@ class FullViewButton @JvmOverloads constructor(
 
         // Text/Detail/Distance are selected automatically and stay hidden.
         root.findViewById<View>(R.id.modeBar)?.visibility = View.GONE
-
-        // A zoom gesture will show the overview again when navigation help is needed.
-        (root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)?.hideImmediately()
     }
-
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt().coerceAtLeast(1)
 }
