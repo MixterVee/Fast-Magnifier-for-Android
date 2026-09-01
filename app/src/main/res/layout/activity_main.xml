@@ -85,6 +85,23 @@
             android:valueFrom="-1"
             android:valueTo="1" />
 
+        <com.mixtervee.fastmagnifier.FullViewButton
+            android:id="@+id/fullViewButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="4dp"
+            android:contentDescription="Full View"
+            android:gravity="center"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:text=""
+            app:icon="@drawable/ic_fullscreen"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="20dp"
+            app:iconTint="@color/white" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/settingsButton"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
@@ -251,5 +268,19 @@
             android:enabled="false"
             android:text="Save" />
     </LinearLayout>
+
+    <View
+        android:id="@+id/fullViewRestoreLayer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@android:color/transparent"
+        android:clickable="true"
+        android:contentDescription="Tap to show controls"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
