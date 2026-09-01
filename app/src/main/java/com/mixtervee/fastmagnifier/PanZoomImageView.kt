@@ -1,6 +1,7 @@
 package com.mixtervee.fastmagnifier
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
@@ -22,6 +23,40 @@ class PanZoomImageView @JvmOverloads constructor(
     private var touchDownX = 0f
     private var touchDownY = 0f
     private var touchMoved = false
+    private var bitmapSwapGeneration = 0
+
+    /**
+     * Keep the user's current zoomed viewport when the displayed bitmap is replaced.
+     * This is especially important when the fast PreviewView freeze is upgraded to
+     * the higher-resolution still image: the detail being inspected should sharpen
+     * in place instead of appearing to jump back to a full-image view.
+     */
+    override fun setImageBitmap(bm: Bitmap?) {
+        val preserveViewport =
+            drawable != null && width > 0 && height > 0 && scaleX > 1.01f && scaleY > 1.01f
+        val visibleBefore = if (preserveViewport) visibleBitmapRectNormalized() else null
+        val savedScaleX = scaleX
+        val savedScaleY = scaleY
+        val generation = ++bitmapSwapGeneration
+
+        super.setImageBitmap(bm)
+
+        if (visibleBefore != null) {
+            val centerX = visibleBefore.centerX()
+            val centerY = visibleBefore.centerY()
+            post {
+                if (generation != bitmapSwapGeneration || drawable == null || width <= 0 || height <= 0) {
+                    return@post
+                }
+
+                pivotX = width / 2f
+                pivotY = height / 2f
+                scaleX = savedScaleX
+                scaleY = savedScaleY
+                panToNormalized(centerX, centerY)
+            }
+        }
+    }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
