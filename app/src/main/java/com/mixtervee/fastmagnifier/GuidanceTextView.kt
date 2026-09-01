@@ -128,18 +128,15 @@ class GuidanceTextView @JvmOverloads constructor(
 
         val actions = mutableListOf<String>()
         actions += "Slide ↑/↓ Zoom"
+        actions += "Tap Full View"
 
         if (zoomed) {
-            actions += "Tap Overview"
             if (!maxReached) actions += "Double-tap Enhance"
             if (canRead) actions += "Read Text (view)"
+        } else if (canRead) {
+            actions += "Read Text (full image)"
         } else {
-            actions += "Tap Full View"
-            if (canRead) {
-                actions += "Read Text (full image)"
-            } else {
-                actions += "OCR after enhancement"
-            }
+            actions += "OCR after enhancement"
         }
 
         if (canUndo) actions += "Undo"
