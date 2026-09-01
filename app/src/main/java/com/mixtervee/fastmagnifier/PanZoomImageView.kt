@@ -8,6 +8,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import androidx.appcompat.widget.AppCompatImageView
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -20,6 +21,12 @@ class PanZoomImageView @JvmOverloads constructor(
     private var bitmapSwapGeneration = 0
     private var lastReleasedRawX = Float.NaN
     private var lastReleasedRawY = Float.NaN
+
+    // Keep the image point the user is inspecting stable while the scale changes.
+    // Pixel translations mean different things at different zoom levels, so simply
+    // clamping the old translation makes zooming unintentionally pan the picture.
+    private var desiredCenterX = 0.5f
+    private var desiredCenterY = 0.5f
 
     /**
      * Remember the last completed touch in screen coordinates. The frozen image
@@ -43,6 +50,11 @@ class PanZoomImageView @JvmOverloads constructor(
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
         if (changedView !== this || visibility != View.VISIBLE) return
+
+        // A newly shown frozen image starts centered. Full View does not change the
+        // frozen image visibility, so this does not disturb Full View navigation.
+        desiredCenterX = 0.5f
+        desiredCenterY = 0.5f
 
         val bitmap = (drawable as? BitmapDrawable)?.bitmap ?: return
         RecentCapturesController.record(context.applicationContext, bitmap)
@@ -82,7 +94,12 @@ class PanZoomImageView @JvmOverloads constructor(
     }
 
     fun panToNormalized(normalizedX: Float, normalizedY: Float) {
+        val nx = normalizedX.coerceIn(0f, 1f)
+        val ny = normalizedY.coerceIn(0f, 1f)
+
         if (width <= 0 || height <= 0 || scaleX <= 1.01f || scaleY <= 1.01f) {
+            desiredCenterX = 0.5f
+            desiredCenterY = 0.5f
             translationX = 0f
             translationY = 0f
             notifyNavigator()
@@ -92,8 +109,12 @@ class PanZoomImageView @JvmOverloads constructor(
         val content = drawableContentRect()
         if (content.width() <= 0f || content.height() <= 0f) return
 
-        val nx = normalizedX.coerceIn(0f, 1f)
-        val ny = normalizedY.coerceIn(0f, 1f)
+        // Remember the requested image-space center, not the current pixel offset.
+        // If an edge prevents this center at a low zoom, keeping the requested point
+        // lets a reversed zoom gesture return smoothly instead of ratcheting away.
+        desiredCenterX = nx
+        desiredCenterY = ny
+
         val localX = content.left + content.width() * nx
         val localY = content.top + content.height() * ny
         val px = pivotX
@@ -138,13 +159,24 @@ class PanZoomImageView @JvmOverloads constructor(
 
     fun clampPan() {
         if (scaleX <= 1.01f || scaleY <= 1.01f) {
+            desiredCenterX = 0.5f
+            desiredCenterY = 0.5f
             translationX = 0f
             translationY = 0f
-        } else {
-            translationX = translationX.coerceIn(-maxPanX(), maxPanX())
-            translationY = translationY.coerceIn(-maxPanY(), maxPanY())
+            notifyNavigator()
+            return
         }
-        notifyNavigator()
+
+        // A direct reset elsewhere in the app sets translation back to zero. Treat
+        // that as a centered viewport so a later zoom cannot resurrect an old pan.
+        if (abs(translationX) < 0.5f && abs(translationY) < 0.5f) {
+            desiredCenterX = 0.5f
+            desiredCenterY = 0.5f
+        }
+
+        // Recompute the translation from the remembered image-space center at the
+        // NEW scale. This is the key difference from clamping the old pixel offset.
+        panToNormalized(desiredCenterX, desiredCenterY)
     }
 
     private fun drawableContentRect(): RectF {
