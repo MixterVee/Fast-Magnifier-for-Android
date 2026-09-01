@@ -50,8 +50,23 @@ class FrozenNavigatorView @JvmOverloads constructor(
     private var dragging = false
     private var manualShowMs = DEFAULT_MANUAL_SHOW_MS
 
+    // The navigator's normal frozen-view rectangle is the permanent Overview zone.
+    // Cache it so Full View can use the exact same screen location after app chrome
+    // is hidden and ConstraintLayout recalculates the GONE controls.
+    private var overviewZoneLeft = 0
+    private var overviewZoneTop = 0
+    private var overviewZoneWidth = 0
+    private var overviewZoneHeight = 0
+
     private val hideRunnable = Runnable {
         if (!dragging) fadeOut()
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        if (!isFullViewActive() && width > 0 && height > 0) {
+            cacheOverviewZone()
+        }
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -93,10 +108,14 @@ class FrozenNavigatorView @JvmOverloads constructor(
             return false
         }
 
+        if (!inFullView) cacheOverviewZone()
+        configureOverviewToggleZone(inFullView)
+
         removeCallbacks(hideRunnable)
         animate().cancel()
         alpha = 1f
         visibility = VISIBLE
+        bringToFront()
         invalidate()
 
         if (!dragging && autoHideMs > 0L) {
@@ -106,40 +125,29 @@ class FrozenNavigatorView @JvmOverloads constructor(
     }
 
     /**
-     * In the normal frozen zoomed view, the navigator's own lower-right rectangle
-     * is a permanent Overview tap zone, even after the navigator fades away.
-     * Both the tap and the navigator bounds are compared in screen coordinates so
-     * zooming/panning the image cannot move the hit target out from under the user.
+     * Main frozen-image taps are no longer used to guess whether the user meant
+     * Overview. The dedicated rectangle owns Overview; every other confirmed tap
+     * follows the normal Full View action.
      */
     fun showForManualTap(): Boolean {
         val target = targetImage() ?: return false
-        if (target.visibility != VISIBLE || target.scaleX <= 1.01f) return false
-
-        val tap = target.lastReleasedRawPosition()
-        val location = IntArray(2)
-        getLocationOnScreen(location)
-        val extra = dp(28f)
-        val zoneLeft = location[0].toFloat() - extra
-        val zoneTop = location[1].toFloat() - extra
-        val zoneRight = location[0] + width.toFloat() + extra
-        val zoneBottom = location[1] + height.toFloat() + extra
-        val inOverviewZone = tap != null &&
-            tap.first in zoneLeft..zoneRight &&
-            tap.second in zoneTop..zoneBottom
-
-        if (inOverviewZone) {
-            return showTemporarily(manualShowMs)
-        }
+        if (target.visibility != VISIBLE) return false
 
         hideImmediately()
         rootView.findViewById<View>(R.id.fullViewButton)?.performClick()
         return true
     }
 
+    /** Called by the dedicated rectangle while normal frozen controls are visible. */
+    fun showForOverviewZone(): Boolean {
+        val shown = showTemporarily(manualShowMs)
+        if (shown) setStatus("Overview shown")
+        return shown
+    }
+
     /**
-     * Dedicated Full View overview path. This deliberately does not route through
-     * showTemporarily()/isFullViewActive() so a stale overlay flag cannot suppress
-     * a valid tap on the Full View Overview control.
+     * Full View uses the same cached Overview rectangle. This path intentionally
+     * bypasses the generic Full View guard because the dedicated zone is explicit.
      */
     fun showForFullView(): Boolean {
         val target = targetImage()
@@ -168,15 +176,26 @@ class FrozenNavigatorView @JvmOverloads constructor(
         return true
     }
 
-    fun toggleVisibility(): Boolean = showForManualTap()
+    /** Prepare the cached red-square Overview zone after Full View hides the chrome. */
+    fun prepareFullViewOverviewToggle() {
+        val target = targetImage()
+        if (target == null || target.visibility != VISIBLE || target.scaleX <= 1.01f) {
+            fullViewOverviewHotspot()?.visibility = GONE
+            return
+        }
+        configureOverviewToggleZone(inFullView = true)
+    }
+
+    fun toggleVisibility(): Boolean = showForOverviewZone()
 
     fun hideImmediately() {
+        if (!isFullViewActive()) cacheOverviewZone()
         removeCallbacks(hideRunnable)
         dragging = false
         animate().cancel()
         alpha = 0f
         visibility = INVISIBLE
-        finishFullViewOverviewState()
+        finishOverviewState()
     }
 
     private fun fadeOut() {
@@ -269,6 +288,47 @@ class FrozenNavigatorView @JvmOverloads constructor(
         imageRect.set(left, top, left + drawWidth, top + drawHeight)
     }
 
+    private fun cacheOverviewZone() {
+        if (width <= 0 || height <= 0) return
+        overviewZoneLeft = left
+        overviewZoneTop = top
+        overviewZoneWidth = width
+        overviewZoneHeight = height
+    }
+
+    private fun configureOverviewToggleZone(inFullView: Boolean) {
+        val target = targetImage()
+        val hotspot = fullViewOverviewHotspot() ?: return
+        if (target == null || target.visibility != VISIBLE || target.scaleX <= 1.01f) {
+            hotspot.visibility = GONE
+            hotspot.setOnClickListener(null)
+            return
+        }
+
+        if (overviewZoneWidth <= 0 || overviewZoneHeight <= 0) cacheOverviewZone()
+        if (overviewZoneWidth <= 0 || overviewZoneHeight <= 0) return
+
+        val params = hotspot.layoutParams
+        params.width = overviewZoneWidth
+        params.height = overviewZoneHeight
+        hotspot.layoutParams = params
+
+        hotspot.visibility = VISIBLE
+        hotspot.isClickable = true
+        hotspot.isFocusable = true
+        hotspot.setOnClickListener {
+            if (inFullView || isFullViewActive()) showForFullView() else showForOverviewZone()
+        }
+
+        // ConstraintLayout still owns the base layout position. Offset the existing
+        // hotspot so its final rectangle exactly matches the navigator's cached zone.
+        hotspot.post {
+            hotspot.translationX = (overviewZoneLeft - hotspot.left).toFloat()
+            hotspot.translationY = (overviewZoneTop - hotspot.top).toFloat()
+            hotspot.bringToFront()
+        }
+    }
+
     private fun currentBitmap(target: PanZoomImageView): Bitmap? =
         (target.drawable as? BitmapDrawable)?.bitmap
 
@@ -284,20 +344,22 @@ class FrozenNavigatorView @JvmOverloads constructor(
     private fun fullViewOverviewDismissLayer(): View? =
         rootView.findViewById(R.id.fullViewOverviewDismissLayer)
 
-    private fun finishFullViewOverviewState() {
+    private fun finishOverviewState() {
         fullViewOverviewDismissLayer()?.apply {
             visibility = GONE
             setOnClickListener(null)
         }
 
-        if (!isFullViewActive()) return
-        val target = targetImage() ?: return
-        if (target.visibility != VISIBLE || target.scaleX <= 1.01f) return
-
-        fullViewOverviewHotspot()?.apply {
-            visibility = VISIBLE
-            bringToFront()
+        val target = targetImage()
+        if (target == null || target.visibility != VISIBLE || target.scaleX <= 1.01f) {
+            fullViewOverviewHotspot()?.apply {
+                visibility = GONE
+                setOnClickListener(null)
+            }
+            return
         }
+
+        configureOverviewToggleZone(inFullView = isFullViewActive())
     }
 
     private fun setStatus(message: String) {
