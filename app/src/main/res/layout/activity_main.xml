@@ -133,42 +133,52 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <LinearLayout
+    <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/modeBar"
-        android:layout_width="0dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:gravity="center"
-        android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
         android:paddingTop="4dp"
         android:paddingBottom="4dp"
+        app:checkedButton="@id/detailMode"
         app:layout_constraintBottom_toTopOf="@id/frozenToolsBar"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+        app:layout_constraintStart_toStartOf="parent"
+        app:selectionRequired="true"
+        app:singleSelection="true">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/textMode"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Text" />
+            android:text="Text"
+            android:textColor="@color/mode_button_text"
+            app:backgroundTint="@color/mode_button_background"
+            app:strokeColor="@color/cyan"
+            app:strokeWidth="1dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/detailMode"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="Detail" />
+            android:text="Detail"
+            android:textColor="@color/mode_button_text"
+            app:backgroundTint="@color/mode_button_background"
+            app:strokeColor="@color/cyan"
+            app:strokeWidth="1dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/distanceMode"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="Distance" />
-    </LinearLayout>
+            android:text="Distance"
+            android:textColor="@color/mode_button_text"
+            app:backgroundTint="@color/mode_button_background"
+            app:strokeColor="@color/cyan"
+            app:strokeWidth="1dp" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
 
     <LinearLayout
         android:id="@+id/frozenToolsBar"
