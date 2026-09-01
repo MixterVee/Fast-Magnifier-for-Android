@@ -8,12 +8,10 @@ import com.google.android.material.button.MaterialButton
 /**
  * Hides all app chrome so the camera/frozen image can be viewed unobstructed.
  *
- * Full View uses two completely separate touch surfaces:
+ * Full View uses separate touch surfaces:
  * - fullViewRestoreLayer exits Full View when no overview is open.
  * - fullViewOverviewDismissLayer closes only the overview while it is open.
- *
- * Keeping those paths physically separate prevents an overview-dismiss tap from
- * ever falling through to the Full View exit action.
+ * - fullViewOverviewHotspot is a generous lower-right tap target that opens it.
  */
 class FullViewButton @JvmOverloads constructor(
     context: Context,
@@ -53,16 +51,16 @@ class FullViewButton @JvmOverloads constructor(
         }
 
         val frozenImage = root.findViewById<View>(R.id.frozenImage)
-        val showOverviewButton =
+        val showOverviewHotspot =
             frozenImage?.visibility == View.VISIBLE && frozenImage.scaleX > 1.01f
 
-        root.findViewById<MaterialButton>(R.id.fullViewOverviewButton)?.apply {
+        root.findViewById<View>(R.id.fullViewOverviewHotspot)?.apply {
             setOnClickListener {
                 (root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)
                     ?.showForFullView()
             }
-            visibility = if (showOverviewButton) View.VISIBLE else View.GONE
-            if (showOverviewButton) bringToFront()
+            visibility = if (showOverviewHotspot) View.VISIBLE else View.GONE
+            if (showOverviewHotspot) bringToFront()
         }
     }
 
@@ -71,7 +69,10 @@ class FullViewButton @JvmOverloads constructor(
 
         // Disable all Full View overlays before hiding the navigator so its cleanup
         // cannot recreate any Full View controls during the transition back.
-        root.findViewById<View>(R.id.fullViewOverviewButton)?.visibility = View.GONE
+        root.findViewById<View>(R.id.fullViewOverviewHotspot)?.apply {
+            visibility = View.GONE
+            setOnClickListener(null)
+        }
         root.findViewById<View>(R.id.fullViewOverviewDismissLayer)?.apply {
             visibility = View.GONE
             setOnClickListener(null)
