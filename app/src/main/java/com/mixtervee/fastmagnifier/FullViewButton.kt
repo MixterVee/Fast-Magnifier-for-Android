@@ -42,7 +42,7 @@ class FullViewButton @JvmOverloads constructor(
             isClickable = true
             isFocusable = true
             bringToFront()
-            setOnClickListener { restoreControls() }
+            setOnClickListener { handleFullViewBackgroundTap() }
         }
 
         val frozenImage = root.findViewById<View>(R.id.frozenImage)
@@ -53,6 +53,24 @@ class FullViewButton @JvmOverloads constructor(
             visibility = if (showOverviewButton) View.VISIBLE else View.GONE
             if (showOverviewButton) bringToFront()
         }
+    }
+
+    /**
+     * If the navigator is currently open, the first background tap dismisses only
+     * the navigator and leaves Full View active. This prevents a navigator-dismiss
+     * tap from also triggering the Full View exit path. A later background tap,
+     * with the navigator already hidden, restores the normal controls.
+     */
+    private fun handleFullViewBackgroundTap() {
+        val root = rootView
+        val navigator = root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView
+
+        if (navigator?.visibility == View.VISIBLE) {
+            navigator.hideImmediately()
+            return
+        }
+
+        restoreControls()
     }
 
     private fun ensureOverviewButton(): MaterialButton {
