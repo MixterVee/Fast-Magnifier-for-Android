@@ -77,9 +77,12 @@ class FrozenNavigatorView @JvmOverloads constructor(
         manualShowMs = durationMs.coerceIn(2500L, 10000L)
     }
 
-    fun showTemporarily(autoHideMs: Long = DEFAULT_SHOW_MS): Boolean {
-        val restoreLayer = rootView.findViewById<View>(R.id.fullViewRestoreLayer)
-        if (restoreLayer?.visibility == VISIBLE) {
+    fun showTemporarily(
+        autoHideMs: Long = DEFAULT_SHOW_MS,
+        allowInFullView: Boolean = false
+    ): Boolean {
+        val inFullView = isFullViewActive()
+        if (inFullView && !allowInFullView) {
             hideImmediately()
             return false
         }
@@ -96,6 +99,12 @@ class FrozenNavigatorView @JvmOverloads constructor(
             alpha = 0f
             visibility = VISIBLE
         }
+
+        if (inFullView) {
+            fullViewOverviewButton()?.visibility = GONE
+            bringToFront()
+        }
+
         animate().alpha(1f).setDuration(140L).start()
         invalidate()
 
@@ -107,6 +116,11 @@ class FrozenNavigatorView @JvmOverloads constructor(
 
     fun showForManualTap(): Boolean = showTemporarily(manualShowMs)
 
+    fun showForFullView(): Boolean = showTemporarily(
+        autoHideMs = manualShowMs,
+        allowInFullView = true
+    )
+
     // Kept for compatibility with older call sites; a tap now always refreshes visibility.
     fun toggleVisibility(): Boolean = showForManualTap()
 
@@ -116,6 +130,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
         animate().cancel()
         alpha = 0f
         visibility = INVISIBLE
+        restoreFullViewOverviewButtonIfNeeded()
     }
 
     private fun fadeOut() {
@@ -125,7 +140,10 @@ class FrozenNavigatorView @JvmOverloads constructor(
             .alpha(0f)
             .setDuration(220L)
             .withEndAction {
-                if (!dragging && alpha <= 0.01f) visibility = INVISIBLE
+                if (!dragging && alpha <= 0.01f) {
+                    visibility = INVISIBLE
+                    restoreFullViewOverviewButtonIfNeeded()
+                }
             }
             .start()
     }
@@ -221,6 +239,23 @@ class FrozenNavigatorView @JvmOverloads constructor(
 
     private fun targetImage(): PanZoomImageView? =
         rootView.findViewById(R.id.frozenImage)
+
+    private fun isFullViewActive(): Boolean =
+        rootView.findViewById<View>(R.id.fullViewRestoreLayer)?.visibility == VISIBLE
+
+    private fun fullViewOverviewButton(): View? =
+        rootView.findViewWithTag(FullViewButton.OVERVIEW_BUTTON_TAG)
+
+    private fun restoreFullViewOverviewButtonIfNeeded() {
+        if (!isFullViewActive()) return
+        val target = targetImage() ?: return
+        if (target.visibility != VISIBLE || target.scaleX <= 1.01f) return
+
+        fullViewOverviewButton()?.apply {
+            visibility = VISIBLE
+            bringToFront()
+        }
+    }
 
     private fun setStatus(message: String) {
         rootView.findViewById<TextView?>(R.id.statusText)?.text = message
