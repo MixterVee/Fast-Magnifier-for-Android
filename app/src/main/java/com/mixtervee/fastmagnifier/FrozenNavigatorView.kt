@@ -78,6 +78,12 @@ class FrozenNavigatorView @JvmOverloads constructor(
     }
 
     fun showTemporarily(autoHideMs: Long = DEFAULT_SHOW_MS): Boolean {
+        val restoreLayer = rootView.findViewById<View>(R.id.fullViewRestoreLayer)
+        if (restoreLayer?.visibility == VISIBLE) {
+            hideImmediately()
+            return false
+        }
+
         val target = targetImage()
         if (target == null || target.visibility != VISIBLE || target.scaleX <= 1.01f) {
             hideImmediately()
