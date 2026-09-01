@@ -16,11 +16,13 @@ class AppSettings(context: Context) {
         const val DEFAULT_OVERVIEW_INDEX = 1
         const val DEFAULT_AREA_ENHANCE_INDEX = 1
         const val DEFAULT_SPEECH_RATE_INDEX = 1
+        const val DEFAULT_KEEP_SCREEN_AWAKE = false
 
         private const val PREFS_NAME = "fast_magnifier_settings"
         private const val KEY_OVERVIEW_INDEX = "overview_duration_index"
         private const val KEY_AREA_ENHANCE_INDEX = "area_enhance_index"
         private const val KEY_SPEECH_RATE_INDEX = "speech_rate_index"
+        private const val KEY_KEEP_SCREEN_AWAKE = "keep_screen_awake"
     }
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -46,6 +48,12 @@ class AppSettings(context: Context) {
             prefs.edit().putInt(KEY_SPEECH_RATE_INDEX, value.coerceIn(SPEECH_RATES.indices)).apply()
         }
 
+    var keepScreenAwake: Boolean
+        get() = prefs.getBoolean(KEY_KEEP_SCREEN_AWAKE, DEFAULT_KEEP_SCREEN_AWAKE)
+        set(value) {
+            prefs.edit().putBoolean(KEY_KEEP_SCREEN_AWAKE, value).apply()
+        }
+
     val overviewDurationMs: Long
         get() = OVERVIEW_DURATIONS_MS[overviewIndex]
 
@@ -64,11 +72,15 @@ class AppSettings(context: Context) {
     val speechRateLabel: String
         get() = SPEECH_RATE_LABELS[speechRateIndex]
 
+    val keepScreenAwakeLabel: String
+        get() = if (keepScreenAwake) "On" else "Off"
+
     fun resetDefaults() {
         prefs.edit()
             .putInt(KEY_OVERVIEW_INDEX, DEFAULT_OVERVIEW_INDEX)
             .putInt(KEY_AREA_ENHANCE_INDEX, DEFAULT_AREA_ENHANCE_INDEX)
             .putInt(KEY_SPEECH_RATE_INDEX, DEFAULT_SPEECH_RATE_INDEX)
+            .putBoolean(KEY_KEEP_SCREEN_AWAKE, DEFAULT_KEEP_SCREEN_AWAKE)
             .apply()
     }
 }
