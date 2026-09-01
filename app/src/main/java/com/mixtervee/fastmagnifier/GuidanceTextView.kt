@@ -71,6 +71,13 @@ class GuidanceTextView @JvmOverloads constructor(
     }
 
     private fun cleanStatus(raw: String): String {
+        val frozen = rootView.findViewById<View>(R.id.frozenImage)?.visibility == View.VISIBLE
+
+        // Enhancement profiles are now chosen automatically; do not surface internal switches.
+        if (!frozen && raw.matches(Regex("(?i)(Text|Detail|Distance) mode"))) {
+            return "Camera ready"
+        }
+
         val instructionFragments = listOf(
             "slide up/down",
             "slide zoom",
@@ -99,8 +106,6 @@ class GuidanceTextView @JvmOverloads constructor(
             }
 
         if (meaningful.isNotEmpty()) return meaningful.joinToString(" • ")
-
-        val frozen = rootView.findViewById<View>(R.id.frozenImage)?.visibility == View.VISIBLE
         return if (frozen) "Frozen image" else "Camera ready"
     }
 
