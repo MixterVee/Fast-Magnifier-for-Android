@@ -109,7 +109,7 @@ class GuidanceTextView @JvmOverloads constructor(
         val frozen = frozenImage?.visibility == View.VISIBLE
 
         if (!frozen) {
-            return "Slide ↑/↓  Zoom   •   Tap  Focus   •   Hold  Freeze"
+            return "Slide ↑/↓ Zoom   •   Tap Focus   •   Hold Freeze"
         }
 
         val zoomed = (frozenImage?.scaleX ?: 1f) > 1.01f
@@ -120,24 +120,20 @@ class GuidanceTextView @JvmOverloads constructor(
         val maxReached = raw.contains("max reached", ignoreCase = true) ||
             raw.contains("Maximum", ignoreCase = true)
 
-        return when {
-            zoomed && maxReached && canUndo && canRead ->
-                "Slide ↑/↓  Zoom   •   Tap  Overview   •   Read Text  Visible area   •   Undo  Back"
+        val actions = mutableListOf<String>()
+        actions += "Slide ↑/↓ Zoom"
 
-            zoomed && canUndo && canRead ->
-                "Tap  Overview   •   Double-tap  Enhance   •   Read Text  Visible area   •   Undo  Back"
-
-            zoomed && canRead ->
-                "Slide ↑/↓  Zoom   •   Tap  Overview   •   Double-tap  Enhance   •   Read Text  Visible area"
-
-            !zoomed && canRead ->
-                "Slide ↑/↓  Zoom   •   Read Text  Full image"
-
-            zoomed ->
-                "Slide ↑/↓  Zoom   •   Tap  Overview   •   Double-tap  Enhance"
-
-            else ->
-                "Slide ↑/↓  Zoom   •   OCR available after enhancement"
+        if (zoomed) {
+            actions += "Tap Overview"
+            if (!maxReached) actions += "Double-tap Enhance"
+            if (canRead) actions += "Read Text (view)"
+        } else if (canRead) {
+            actions += "Read Text (full image)"
+        } else {
+            actions += "OCR after enhancement"
         }
+
+        if (canUndo) actions += "Undo"
+        return actions.joinToString("   •   ")
     }
 }
