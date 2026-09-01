@@ -102,6 +102,14 @@ class FrozenNavigatorView @JvmOverloads constructor(
 
         if (inFullView) {
             fullViewOverviewButton()?.visibility = GONE
+            fullViewOverviewDismissLayer()?.apply {
+                visibility = VISIBLE
+                isClickable = true
+                isFocusable = true
+                bringToFront()
+                setOnClickListener { hideImmediately() }
+            }
+            // The navigator sits above its dedicated dismiss surface.
             bringToFront()
         }
 
@@ -130,7 +138,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
         animate().cancel()
         alpha = 0f
         visibility = INVISIBLE
-        restoreFullViewOverviewButtonIfNeeded()
+        finishFullViewOverviewState()
     }
 
     private fun fadeOut() {
@@ -142,7 +150,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
             .withEndAction {
                 if (!dragging && alpha <= 0.01f) {
                     visibility = INVISIBLE
-                    restoreFullViewOverviewButtonIfNeeded()
+                    finishFullViewOverviewState()
                 }
             }
             .start()
@@ -244,9 +252,17 @@ class FrozenNavigatorView @JvmOverloads constructor(
         rootView.findViewById<View>(R.id.fullViewRestoreLayer)?.visibility == VISIBLE
 
     private fun fullViewOverviewButton(): View? =
-        rootView.findViewWithTag(FullViewButton.OVERVIEW_BUTTON_TAG)
+        rootView.findViewById(R.id.fullViewOverviewButton)
 
-    private fun restoreFullViewOverviewButtonIfNeeded() {
+    private fun fullViewOverviewDismissLayer(): View? =
+        rootView.findViewById(R.id.fullViewOverviewDismissLayer)
+
+    private fun finishFullViewOverviewState() {
+        fullViewOverviewDismissLayer()?.apply {
+            visibility = GONE
+            setOnClickListener(null)
+        }
+
         if (!isFullViewActive()) return
         val target = targetImage() ?: return
         if (target.visibility != VISIBLE || target.scaleX <= 1.01f) return
