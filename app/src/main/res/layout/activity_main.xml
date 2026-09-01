@@ -156,10 +156,10 @@
         android:layout_height="wrap_content"
         android:visibility="gone"
         app:checkedButton="@id/detailMode"
-        app:selectionRequired="true"
-        app:singleSelection="true"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toTopOf="parent"
+        app:selectionRequired="true"
+        app:singleSelection="true">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/textMode"
@@ -275,6 +275,7 @@
             app:iconTint="@color/white" />
     </LinearLayout>
 
+    <!-- Full View exit surface. It is never used to dismiss an open overview. -->
     <View
         android:id="@+id/fullViewRestoreLayer"
         android:layout_width="0dp"
@@ -288,5 +289,46 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Separate modal surface used only while the Full View overview is open. -->
+    <View
+        android:id="@+id/fullViewOverviewDismissLayer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@android:color/transparent"
+        android:clickable="true"
+        android:contentDescription="Tap to close overview"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/fullViewOverviewButton"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:alpha="0.78"
+        android:backgroundTint="#AF0A1018"
+        android:contentDescription="Show overview"
+        android:gravity="center"
+        android:minWidth="0dp"
+        android:padding="0dp"
+        android:text=""
+        android:visibility="gone"
+        app:cornerRadius="12dp"
+        app:icon="@drawable/ic_overview"
+        app:iconGravity="textStart"
+        app:iconPadding="0dp"
+        app:iconSize="22dp"
+        app:iconTint="@color/white"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:strokeColor="#B4FFFFFF"
+        app:strokeWidth="1dp" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
