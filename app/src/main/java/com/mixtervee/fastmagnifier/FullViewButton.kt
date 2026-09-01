@@ -28,7 +28,6 @@ class FullViewButton @JvmOverloads constructor(
 
         root.findViewById<View>(R.id.cameraToolsBar)?.visibility = View.GONE
         root.findViewById<View>(R.id.statusText)?.visibility = View.GONE
-        root.findViewById<View>(R.id.modeBar)?.visibility = View.GONE
         root.findViewById<View>(R.id.frozenToolsBar)?.visibility = View.GONE
         root.findViewById<View>(R.id.bottomBar)?.visibility = View.GONE
 
@@ -50,12 +49,14 @@ class FullViewButton @JvmOverloads constructor(
 
         root.findViewById<View>(R.id.cameraToolsBar)?.visibility = View.VISIBLE
         root.findViewById<View>(R.id.statusText)?.visibility = View.VISIBLE
-        root.findViewById<View>(R.id.modeBar)?.visibility = View.VISIBLE
         root.findViewById<View>(R.id.bottomBar)?.visibility = View.VISIBLE
 
         val frozen = root.findViewById<View>(R.id.frozenImage)?.visibility == View.VISIBLE
         root.findViewById<View>(R.id.frozenToolsBar)?.visibility =
             if (frozen) View.VISIBLE else View.GONE
+
+        // Text/Detail/Distance are now selected automatically and stay hidden.
+        root.findViewById<View>(R.id.modeBar)?.visibility = View.GONE
 
         // Keep the overview hidden after leaving Full View; a normal frozen-image tap can show it.
         (root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)?.hideImmediately()
