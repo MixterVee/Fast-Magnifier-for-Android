@@ -305,30 +305,48 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/fullViewOverviewButton"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="16dp"
-        android:alpha="0.78"
-        android:backgroundTint="#AF0A1018"
+    <!--
+        Large Full View Overview hotspot. The visible cue remains a compact 48dp
+        button, but the whole 104dp corner catches the tap so near-misses cannot
+        fall through to the Full View exit layer.
+    -->
+    <FrameLayout
+        android:id="@+id/fullViewOverviewHotspot"
+        android:layout_width="104dp"
+        android:layout_height="104dp"
+        android:background="@android:color/transparent"
+        android:clickable="true"
         android:contentDescription="Show overview"
-        android:gravity="center"
-        android:minWidth="0dp"
-        android:padding="0dp"
-        android:text=""
+        android:focusable="true"
         android:visibility="gone"
-        app:cornerRadius="12dp"
-        app:icon="@drawable/ic_overview"
-        app:iconGravity="textStart"
-        app:iconPadding="0dp"
-        app:iconSize="22dp"
-        app:iconTint="@color/white"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:strokeColor="#B4FFFFFF"
-        app:strokeWidth="1dp" />
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/fullViewOverviewButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="16dp"
+            android:alpha="0.78"
+            android:backgroundTint="#AF0A1018"
+            android:clickable="false"
+            android:focusable="false"
+            android:gravity="center"
+            android:importantForAccessibility="no"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:text=""
+            app:cornerRadius="12dp"
+            app:icon="@drawable/ic_overview"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="22dp"
+            app:iconTint="@color/white"
+            app:strokeColor="#B4FFFFFF"
+            app:strokeWidth="1dp" />
+    </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
