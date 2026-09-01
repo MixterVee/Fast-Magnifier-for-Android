@@ -49,6 +49,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var frozenTapDetector: GestureDetector
     private lateinit var ocrController: OcrController
     private lateinit var highResCaptureController: HighResCaptureController
+    private lateinit var appSettings: AppSettings
+    private lateinit var settingsController: SettingsController
     private var camera: Camera? = null
     private var original: Bitmap? = null
     private var enhanced: Bitmap? = null
@@ -97,8 +99,23 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         touchSlop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
+
+        appSettings = AppSettings(this)
         ocrController = OcrController(this) { message -> binding.statusText.text = message }
+        ocrController.setSpeechRate(appSettings.speechRate)
         highResCaptureController = HighResCaptureController(ContextCompat.getMainExecutor(this))
+        settingsController = SettingsController(
+            activity = this,
+            settings = appSettings,
+            status = { message -> binding.statusText.text = message },
+            onOverviewChanged = {
+                binding.navigatorView.setManualShowDuration(appSettings.overviewDurationMs)
+            },
+            onSpeechRateChanged = {
+                ocrController.setSpeechRate(appSettings.speechRate)
+            }
+        )
+        binding.navigatorView.setManualShowDuration(appSettings.overviewDurationMs)
 
         setupFrozenTapDetector()
         setupFrozenImageGestures()
@@ -114,6 +131,7 @@ class MainActivity : AppCompatActivity() {
         binding.readTextButton.setOnClickListener { readTextFromFrozen() }
         binding.saveButton.setOnClickListener { saveCurrentPicture() }
         binding.lightButton.setOnClickListener { toggleTorch() }
+        binding.settingsButton.setOnClickListener { settingsController.show() }
         binding.exposureSlider.addOnChangeListener { _, value, fromUser ->
             if (fromUser) setExposureCompensation(value.toInt())
         }
@@ -168,21 +186,13 @@ class MainActivity : AppCompatActivity() {
                         frozenScale = (frozenStartScale * exp(verticalTravel.toDouble()).toFloat())
                             .coerceIn(1f, 8f)
                         applyFrozenScale()
-                        binding.statusText.text = if (frozenScale > 1.01f) {
-                            "Frozen zoom ${formatZoom(frozenScale)}× • double-tap to enhance area"
-                        } else {
-                            "Frozen 1.0× • slide up to zoom"
-                        }
+                        binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}×"
                     }
                 }
 
                 MotionEvent.ACTION_UP -> {
                     if (frozenZoomGesture) {
-                        binding.statusText.text = if (frozenScale > 1.01f) {
-                            "Frozen zoom ${formatZoom(frozenScale)}× • tap overview • double-tap enhance"
-                        } else {
-                            "Slide up/down to zoom • Save keeps full image"
-                        }
+                        binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}×"
                     }
                     frozenZoomGesture = false
                 }
@@ -199,15 +209,11 @@ class MainActivity : AppCompatActivity() {
         if (binding.frozenImage.visibility != View.VISIBLE) return
 
         if (frozenScale > 1.01f) {
-            val shown = binding.navigatorView.toggleVisibility()
-            binding.statusText.text = if (shown) {
-                "Overview shown • drag cyan box • double-tap image to enhance"
-            } else {
-                "Overview hidden • tap to show • double-tap to enhance"
-            }
+            binding.navigatorView.showForManualTap()
+            binding.statusText.text = "Overview shown"
         } else {
             binding.navigatorView.hideImmediately()
-            binding.statusText.text = "Slide up/down to zoom • Save keeps full image"
+            binding.statusText.text = "Frozen 1.0×"
         }
     }
 
@@ -220,8 +226,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (areaEnhancePasses >= MAX_AREA_ENHANCE_PASSES) {
-            binding.statusText.text =
-                "Maximum $MAX_AREA_ENHANCE_PASSES area enhancements reached • Undo to go back"
+            binding.statusText.text = "Maximum $MAX_AREA_ENHANCE_PASSES area enhancements reached"
             return
         }
 
@@ -262,7 +267,7 @@ class MainActivity : AppCompatActivity() {
 
         worker.execute {
             try {
-                val focused = fastEnhance(crop, selectedMode, 1.45f)
+                val focused = fastEnhance(crop, selectedMode, appSettings.areaEnhanceBoost)
                 val out = source.copy(Bitmap.Config.ARGB_8888, true)
                 val pixels = IntArray(cropWidth * cropHeight)
                 focused.getPixels(pixels, 0, cropWidth, 0, 0, cropWidth, cropHeight)
@@ -290,9 +295,9 @@ class MainActivity : AppCompatActivity() {
                     binding.saveButton.isEnabled = true
 
                     binding.statusText.text = if (areaEnhancePasses >= MAX_AREA_ENHANCE_PASSES) {
-                        "Area enhanced in ${ms} ms • $areaEnhancePasses/$MAX_AREA_ENHANCE_PASSES max reached • Undo available"
+                        "Area enhanced in ${ms} ms • $areaEnhancePasses/$MAX_AREA_ENHANCE_PASSES max reached"
                     } else {
-                        "Area enhanced in ${ms} ms • $areaEnhancePasses/$MAX_AREA_ENHANCE_PASSES • double-tap for another pass"
+                        "Area enhanced in ${ms} ms • $areaEnhancePasses/$MAX_AREA_ENHANCE_PASSES"
                     }
                 }
             } catch (t: Throwable) {
@@ -409,7 +414,7 @@ class MainActivity : AppCompatActivity() {
                 stillCapture
             )
             setupCameraControls()
-            binding.statusText.text = liveHint()
+            binding.statusText.text = "Camera ready"
         }, ContextCompat.getMainExecutor(this))
     }
 
@@ -459,11 +464,7 @@ class MainActivity : AppCompatActivity() {
                 future.get()
                 torchEnabled = target
                 binding.lightButton.text = if (torchEnabled) "Light On" else "Light"
-                binding.statusText.text = if (binding.frozenImage.visibility == View.VISIBLE) {
-                    if (torchEnabled) "Light on • Frozen" else "Light off • Frozen"
-                } else {
-                    if (torchEnabled) "Light on • ${liveHint()}" else "Light off • ${liveHint()}"
-                }
+                binding.statusText.text = if (torchEnabled) "Light on" else "Light off"
             } catch (_: Throwable) {
                 binding.statusText.text = "Could not change camera light"
             } finally {
@@ -539,7 +540,7 @@ class MainActivity : AppCompatActivity() {
                         focusAt(event.x, event.y)
                     } else if (zoomGesture) {
                         val ratio = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: touchStartZoom
-                        binding.statusText.text = "Zoom ${formatZoom(ratio)}× • slide up/down"
+                        binding.statusText.text = "Zoom ${formatZoom(ratio)}×"
                     }
                 }
                 zoomGesture = false
@@ -572,12 +573,12 @@ class MainActivity : AppCompatActivity() {
                 try {
                     val result = future.get()
                     binding.statusText.text = if (result.isFocusSuccessful) {
-                        "Focus locked • Hold to freeze"
+                        "Focus locked"
                     } else {
-                        "Focus adjusted • Hold to freeze"
+                        "Focus adjusted"
                     }
                 } catch (_: Throwable) {
-                    binding.statusText.text = liveHint()
+                    binding.statusText.text = "Camera ready"
                 }
             }
 
@@ -626,7 +627,7 @@ class MainActivity : AppCompatActivity() {
             binding.statusText.text = "${modeLabel(newMode)} mode • Enhancing…"
             enhanceFrozen()
         } else {
-            binding.statusText.text = "${modeLabel(newMode)} mode • ${liveHint()}"
+            binding.statusText.text = "${modeLabel(newMode)} mode"
         }
     }
 
@@ -680,11 +681,9 @@ class MainActivity : AppCompatActivity() {
                     return@capture
                 }
 
-                val start = System.nanoTime()
                 worker.execute {
                     try {
                         val qualityEnhanced = fastEnhance(qualitySource, selectedMode)
-                        val ms = (System.nanoTime() - start) / 1_000_000
                         runOnUiThread {
                             if (
                                 sessionId != freezeSessionId ||
@@ -746,7 +745,7 @@ class MainActivity : AppCompatActivity() {
         binding.readTextButton.isEnabled = false
         binding.saveButton.isEnabled = false
         setupCameraControls()
-        binding.statusText.text = liveHint()
+        binding.statusText.text = "Camera ready"
     }
 
     private fun enhanceFrozen() {
@@ -774,8 +773,7 @@ class MainActivity : AppCompatActivity() {
                     binding.toggleButton.text = "Original"
                     binding.readTextButton.isEnabled = !ocrInProgress
                     binding.saveButton.isEnabled = true
-                    binding.statusText.text =
-                        "Enhanced in ${ms} ms • Slide zoom • double-tap zoomed area to enhance"
+                    binding.statusText.text = "Enhanced in ${ms} ms"
                 }
             } catch (t: Throwable) {
                 runOnUiThread {
@@ -798,11 +796,7 @@ class MainActivity : AppCompatActivity() {
         binding.frozenImage.setImageBitmap(if (showingEnhanced) e else original)
         binding.frozenImage.clampPan()
         binding.toggleButton.text = if (showingEnhanced) "Original" else "Enhanced"
-        binding.statusText.text = if (showingEnhanced) {
-            "Enhanced • Slide zoom • double-tap area to enhance • Save available"
-        } else {
-            "Original • Slide zoom • tap Enhanced before area enhancement • Save available"
-        }
+        binding.statusText.text = if (showingEnhanced) "Enhanced" else "Original"
     }
 
     private fun readTextFromFrozen() {
