@@ -4,12 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
 import android.util.AttributeSet
-import android.view.MotionEvent
-import android.view.ViewConfiguration
-import android.widget.TextView
 import androidx.appcompat.widget.AppCompatImageView
-import java.util.Locale
-import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
@@ -19,10 +14,6 @@ class PanZoomImageView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : AppCompatImageView(context, attrs, defStyleAttr) {
 
-    private val tapSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
-    private var touchDownX = 0f
-    private var touchDownY = 0f
-    private var touchMoved = false
     private var bitmapSwapGeneration = 0
 
     /**
@@ -56,59 +47,6 @@ class PanZoomImageView @JvmOverloads constructor(
                 panToNormalized(centerX, centerY)
             }
         }
-    }
-
-    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-            touchDownX = event.x
-            touchDownY = event.y
-            touchMoved = false
-        }
-
-        val handled = super.dispatchTouchEvent(event)
-
-        when (event.actionMasked) {
-            MotionEvent.ACTION_MOVE -> {
-                val movement = hypot(
-                    (event.x - touchDownX).toDouble(),
-                    (event.y - touchDownY).toDouble()
-                )
-                if (movement > tapSlop * 1.25f) touchMoved = true
-
-                if (scaleX > 1.01f) {
-                    navigator()?.showTemporarily()
-                    setStatus("Frozen zoom ${formatZoom(scaleX)}× • overview fades automatically")
-                } else {
-                    navigator()?.hideImmediately()
-                }
-            }
-
-            MotionEvent.ACTION_UP -> {
-                if (!touchMoved && scaleX > 1.01f) {
-                    val shown = navigator()?.toggleVisibility() ?: false
-                    setStatus(
-                        if (shown) {
-                            "Overview shown • drag cyan box to move • tap image to hide"
-                        } else {
-                            "Overview hidden • tap image to show"
-                        }
-                    )
-                } else if (scaleX > 1.01f) {
-                    navigator()?.showTemporarily()
-                    setStatus("Frozen zoom ${formatZoom(scaleX)}× • tap image to show/hide overview")
-                } else {
-                    navigator()?.hideImmediately()
-                    setStatus("Slide up/down to zoom • Save keeps full image")
-                }
-                touchMoved = false
-            }
-
-            MotionEvent.ACTION_CANCEL -> {
-                touchMoved = false
-            }
-        }
-
-        return handled
     }
 
     fun panToNormalized(normalizedX: Float, normalizedY: Float) {
@@ -209,11 +147,4 @@ class PanZoomImageView @JvmOverloads constructor(
     private fun notifyNavigator() {
         navigator()?.invalidate()
     }
-
-    private fun setStatus(message: String) {
-        rootView.findViewById<TextView?>(R.id.statusText)?.text = message
-    }
-
-    private fun formatZoom(value: Float): String =
-        String.format(Locale.US, "%.1f", value)
 }
