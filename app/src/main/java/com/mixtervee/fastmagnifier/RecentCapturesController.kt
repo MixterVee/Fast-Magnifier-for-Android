@@ -1,5 +1,6 @@
 package com.mixtervee.fastmagnifier
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.appcompat.app.AppCompatActivity
@@ -14,7 +15,7 @@ import kotlin.math.max
 
 /**
  * Keeps a small private rolling history of recently frozen images.
- * These are convenience copies for reopening inside Fast Magnifier; the normal Save
+ * These are convenience copies for viewing inside Fast Magnifier; the normal Save
  * action remains the way to put a permanent image in Pictures/Fast Magnifier.
  */
 class RecentCapturesController(
@@ -22,40 +23,66 @@ class RecentCapturesController(
     private val status: (String) -> Unit,
     private val onSelected: (Bitmap) -> Unit
 ) {
-    private companion object {
-        const val MAX_CAPTURES = 8
-        const val MAX_DIMENSION = 1920
-        const val JPEG_QUALITY = 90
-        const val DIRECTORY_NAME = "recent_captures"
-        const val FILE_PREFIX = "capture_"
-    }
+    companion object {
+        private const val MAX_CAPTURES = 8
+        private const val MAX_DIMENSION = 1920
+        private const val JPEG_QUALITY = 90
+        private const val DIRECTORY_NAME = "recent_captures"
+        private const val FILE_PREFIX = "capture_"
+        private val writer = Executors.newSingleThreadExecutor()
 
-    private val worker = Executors.newSingleThreadExecutor()
-    private val folder = File(activity.filesDir, DIRECTORY_NAME)
+        /** Called when a new freeze first becomes visible. */
+        fun record(context: Context, bitmap: Bitmap) {
+            writer.execute {
+                try {
+                    val folder = folder(context)
+                    if (!folder.exists() && !folder.mkdirs()) return@execute
 
-    fun count(): Int = recentFiles().size
-
-    fun record(bitmap: Bitmap) {
-        val source = bitmap
-        worker.execute {
-            try {
-                if (!folder.exists() && !folder.mkdirs()) return@execute
-
-                val stored = scaleForHistory(source)
-                val file = File(folder, "$FILE_PREFIX${System.currentTimeMillis()}.jpg")
-                FileOutputStream(file).use { stream ->
-                    stored.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, stream)
+                    val stored = scaleForHistory(bitmap)
+                    val file = File(folder, "$FILE_PREFIX${System.currentTimeMillis()}.jpg")
+                    FileOutputStream(file).use { stream ->
+                        stored.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, stream)
+                    }
+                    if (stored !== bitmap) stored.recycle()
+                    recentFiles(context).drop(MAX_CAPTURES).forEach { it.delete() }
+                } catch (_: Throwable) {
+                    // History is convenience-only; never interrupt magnifier use if it fails.
                 }
-                if (stored !== source) stored.recycle()
-                pruneOldCaptures()
-            } catch (_: Throwable) {
-                // Recent history is convenience-only; never interrupt magnifier use if it fails.
             }
+        }
+
+        private fun folder(context: Context): File = File(context.filesDir, DIRECTORY_NAME)
+
+        private fun recentFiles(context: Context): List<File> {
+            val folder = folder(context)
+            if (!folder.exists()) return emptyList()
+            return folder.listFiles()
+                ?.filter {
+                    it.isFile && it.name.startsWith(FILE_PREFIX) && it.extension.equals("jpg", true)
+                }
+                ?.sortedByDescending { it.lastModified() }
+                ?: emptyList()
+        }
+
+        private fun scaleForHistory(src: Bitmap): Bitmap {
+            val maxDim = max(src.width, src.height)
+            if (maxDim <= MAX_DIMENSION) return src
+            val scale = MAX_DIMENSION.toFloat() / maxDim
+            return Bitmap.createScaledBitmap(
+                src,
+                (src.width * scale).toInt().coerceAtLeast(1),
+                (src.height * scale).toInt().coerceAtLeast(1),
+                true
+            )
         }
     }
 
+    private val reader = Executors.newSingleThreadExecutor()
+
+    fun count(): Int = recentFiles(activity).size
+
     fun show() {
-        val files = recentFiles()
+        val files = recentFiles(activity)
         if (files.isEmpty()) {
             MaterialAlertDialogBuilder(activity)
                 .setTitle("Recent captures")
@@ -75,17 +102,17 @@ class RecentCapturesController(
                 files.getOrNull(which)?.let { load(it) }
             }
             .setNeutralButton("Clear all") { _, _ -> confirmClear() }
-            .setNegativeButton("Back") { _, _ -> }
+            .setNegativeButton("Back", null)
             .show()
     }
 
     fun close() {
-        worker.shutdownNow()
+        reader.shutdownNow()
     }
 
     private fun load(file: File) {
         status("Opening recent capture…")
-        worker.execute {
+        reader.execute {
             val bitmap = try {
                 BitmapFactory.decodeFile(file.absolutePath)
             } catch (_: Throwable) {
@@ -112,33 +139,9 @@ class RecentCapturesController(
     }
 
     private fun clearAll() {
-        worker.execute {
-            recentFiles().forEach { it.delete() }
+        reader.execute {
+            recentFiles(activity).forEach { it.delete() }
             activity.runOnUiThread { status("Recent captures cleared") }
         }
-    }
-
-    private fun recentFiles(): List<File> {
-        if (!folder.exists()) return emptyList()
-        return folder.listFiles()
-            ?.filter { it.isFile && it.name.startsWith(FILE_PREFIX) && it.extension.equals("jpg", true) }
-            ?.sortedByDescending { it.lastModified() }
-            ?: emptyList()
-    }
-
-    private fun pruneOldCaptures() {
-        recentFiles().drop(MAX_CAPTURES).forEach { it.delete() }
-    }
-
-    private fun scaleForHistory(src: Bitmap): Bitmap {
-        val maxDim = max(src.width, src.height)
-        if (maxDim <= MAX_DIMENSION) return src
-        val scale = MAX_DIMENSION.toFloat() / maxDim
-        return Bitmap.createScaledBitmap(
-            src,
-            (src.width * scale).toInt().coerceAtLeast(1),
-            (src.height * scale).toInt().coerceAtLeast(1),
-            true
-        )
     }
 }
