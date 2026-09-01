@@ -54,13 +54,23 @@ class FullViewButton @JvmOverloads constructor(
         val showOverviewHotspot =
             frozenImage?.visibility == View.VISIBLE && frozenImage.scaleX > 1.01f
 
+        val openOverview = View.OnClickListener {
+            (root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)
+                ?.showForFullView()
+        }
+
+        // Route both the generous corner target and the visible cue to the exact
+        // same action. This makes the overview reliable whether Android delivers
+        // the tap to the FrameLayout or to the MaterialButton inside it.
         root.findViewById<View>(R.id.fullViewOverviewHotspot)?.apply {
-            setOnClickListener {
-                (root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)
-                    ?.showForFullView()
-            }
+            setOnClickListener(openOverview)
             visibility = if (showOverviewHotspot) View.VISIBLE else View.GONE
             if (showOverviewHotspot) bringToFront()
+        }
+        root.findViewById<View>(R.id.fullViewOverviewButton)?.apply {
+            setOnClickListener(openOverview)
+            isClickable = true
+            visibility = View.VISIBLE
         }
     }
 
@@ -69,6 +79,7 @@ class FullViewButton @JvmOverloads constructor(
 
         // Disable all Full View overlays before hiding the navigator so its cleanup
         // cannot recreate any Full View controls during the transition back.
+        root.findViewById<View>(R.id.fullViewOverviewButton)?.setOnClickListener(null)
         root.findViewById<View>(R.id.fullViewOverviewHotspot)?.apply {
             visibility = View.GONE
             setOnClickListener(null)
