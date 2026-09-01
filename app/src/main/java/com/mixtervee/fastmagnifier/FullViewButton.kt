@@ -6,12 +6,10 @@ import android.view.View
 import com.google.android.material.button.MaterialButton
 
 /**
- * Hides all app chrome so the camera/frozen image can be viewed unobstructed.
+ * Dedicated Full View control.
  *
- * Full View uses separate touch surfaces:
- * - fullViewRestoreLayer exits Full View when no overview is open.
- * - fullViewOverviewDismissLayer closes only the overview while it is open.
- * - fullViewOverviewHotspot is a generous lower-right tap target that opens it.
+ * The bottom-right Full View button only enters Full View. Overview is handled by
+ * the navigator's own dedicated rectangle, never by guessing a tap on the image.
  */
 class FullViewButton @JvmOverloads constructor(
     context: Context,
@@ -25,8 +23,11 @@ class FullViewButton @JvmOverloads constructor(
 
     private fun enterFullView() {
         val root = rootView
+        val navigator = root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView
 
-        (root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)?.hideImmediately()
+        // Cache/hide the navigator while its normal frozen-view rectangle still has
+        // the exact location the user recognizes as the Overview area.
+        navigator?.hideImmediately()
         root.findViewById<View>(R.id.focusRing)?.visibility = View.GONE
 
         root.findViewById<View>(R.id.cameraToolsBar)?.visibility = View.GONE
@@ -37,8 +38,7 @@ class FullViewButton @JvmOverloads constructor(
         root.findViewById<View>(R.id.fullViewOverviewDismissLayer)?.apply {
             visibility = View.GONE
             setOnClickListener {
-                (root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)
-                    ?.hideImmediately()
+                navigator?.hideImmediately()
             }
         }
 
@@ -50,39 +50,28 @@ class FullViewButton @JvmOverloads constructor(
             setOnClickListener { restoreControls() }
         }
 
-        val frozenImage = root.findViewById<View>(R.id.frozenImage)
-        val showOverviewHotspot =
-            frozenImage?.visibility == View.VISIBLE && frozenImage.scaleX > 1.01f
-
-        val openOverview = View.OnClickListener {
-            (root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)
-                ?.showForFullView()
-        }
-
-        // Route both the generous corner target and the visible cue to the exact
-        // same action. This makes the overview reliable whether Android delivers
-        // the tap to the FrameLayout or to the MaterialButton inside it.
-        root.findViewById<View>(R.id.fullViewOverviewHotspot)?.apply {
-            setOnClickListener(openOverview)
-            visibility = if (showOverviewHotspot) View.VISIBLE else View.GONE
-            if (showOverviewHotspot) bringToFront()
-        }
+        // Put the Overview toggle back in the navigator's cached rectangle, above
+        // the Full View restore surface. The little overview icon remains only a cue;
+        // the whole rectangle is the actual target.
         root.findViewById<View>(R.id.fullViewOverviewButton)?.apply {
-            setOnClickListener(openOverview)
-            isClickable = true
-            visibility = View.VISIBLE
+            isClickable = false
+            isFocusable = false
         }
+        navigator?.prepareFullViewOverviewToggle()
     }
 
     private fun restoreControls() {
         val root = rootView
 
-        // Disable all Full View overlays before hiding the navigator so its cleanup
-        // cannot recreate any Full View controls during the transition back.
-        root.findViewById<View>(R.id.fullViewOverviewButton)?.setOnClickListener(null)
+        root.findViewById<View>(R.id.fullViewOverviewButton)?.apply {
+            isClickable = false
+            isFocusable = false
+        }
         root.findViewById<View>(R.id.fullViewOverviewHotspot)?.apply {
             visibility = View.GONE
             setOnClickListener(null)
+            translationX = 0f
+            translationY = 0f
         }
         root.findViewById<View>(R.id.fullViewOverviewDismissLayer)?.apply {
             visibility = View.GONE
@@ -93,7 +82,8 @@ class FullViewButton @JvmOverloads constructor(
             setOnClickListener(null)
         }
 
-        (root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)?.hideImmediately()
+        val navigator = root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView
+        navigator?.hideImmediately()
 
         root.findViewById<View>(R.id.cameraToolsBar)?.visibility = View.VISIBLE
         root.findViewById<View>(R.id.statusText)?.visibility = View.VISIBLE
