@@ -28,6 +28,15 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <com.mixtervee.fastmagnifier.AutoEnhanceControllerView
+        android:id="@+id/autoEnhanceController"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:importantForAccessibility="no"
+        android:visibility="invisible"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <View
         android:id="@+id/focusRing"
         android:layout_width="72dp"
@@ -54,14 +63,21 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
-        <com.google.android.material.button.MaterialButton
+        <com.mixtervee.fastmagnifier.TorchIconButton
             android:id="@+id/lightButton"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:enabled="false"
-            android:minWidth="88dp"
-            android:text="Light" />
+            android:gravity="center"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:text=""
+            app:icon="@drawable/ic_torch"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="22dp"
+            app:iconTint="@color/torch_icon_tint" />
 
         <TextView
             android:id="@+id/exposureText"
@@ -84,23 +100,6 @@
             android:value="0"
             android:valueFrom="-1"
             android:valueTo="1" />
-
-        <com.mixtervee.fastmagnifier.FullViewButton
-            android:id="@+id/fullViewButton"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="4dp"
-            android:contentDescription="Full View"
-            android:gravity="center"
-            android:minWidth="0dp"
-            android:padding="0dp"
-            android:text=""
-            app:icon="@drawable/ic_fullscreen"
-            app:iconGravity="textStart"
-            app:iconPadding="0dp"
-            app:iconSize="20dp"
-            app:iconTint="@color/white" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/settingsButton"
@@ -146,55 +145,39 @@
         android:text="Camera ready"
         android:textColor="@color/white"
         android:textSize="14sp"
-        app:layout_constraintBottom_toTopOf="@id/modeBar"
+        app:layout_constraintBottom_toTopOf="@id/frozenToolsBar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
+    <!-- Retained only as hidden targets for MainActivity's existing enhancement profiles. -->
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/modeBar"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp"
+        android:visibility="gone"
         app:checkedButton="@id/detailMode"
-        app:layout_constraintBottom_toTopOf="@id/frozenToolsBar"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
         app:selectionRequired="true"
-        app:singleSelection="true">
+        app:singleSelection="true"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/textMode"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Text"
-            android:textColor="@color/mode_button_text"
-            app:backgroundTint="@color/mode_button_background"
-            app:strokeColor="@color/cyan"
-            app:strokeWidth="1dp" />
+            android:text="Text" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/detailMode"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Detail"
-            android:textColor="@color/mode_button_text"
-            app:backgroundTint="@color/mode_button_background"
-            app:strokeColor="@color/cyan"
-            app:strokeWidth="1dp" />
+            android:text="Detail" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/distanceMode"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Distance"
-            android:textColor="@color/mode_button_text"
-            app:backgroundTint="@color/mode_button_background"
-            app:strokeColor="@color/cyan"
-            app:strokeWidth="1dp" />
+            android:text="Distance" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
     <LinearLayout
@@ -239,7 +222,7 @@
         android:layout_height="wrap_content"
         android:gravity="center"
         android:orientation="horizontal"
-        android:paddingHorizontal="8dp"
+        android:paddingHorizontal="4dp"
         android:paddingTop="4dp"
         android:paddingBottom="16dp"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -256,7 +239,7 @@
             android:id="@+id/toggleButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="6dp"
             android:enabled="false"
             android:text="Original" />
 
@@ -264,9 +247,26 @@
             android:id="@+id/saveButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="6dp"
             android:enabled="false"
             android:text="Save" />
+
+        <com.mixtervee.fastmagnifier.FullViewButton
+            android:id="@+id/fullViewButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="6dp"
+            android:contentDescription="Full View"
+            android:gravity="center"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            android:text=""
+            app:icon="@drawable/ic_fullscreen"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="21dp"
+            app:iconTint="@color/white" />
     </LinearLayout>
 
     <View
