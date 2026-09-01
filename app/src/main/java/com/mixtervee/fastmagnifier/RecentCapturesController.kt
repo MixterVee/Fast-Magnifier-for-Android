@@ -29,11 +29,11 @@ class RecentCapturesController(
         private const val JPEG_QUALITY = 90
         private const val DIRECTORY_NAME = "recent_captures"
         private const val FILE_PREFIX = "capture_"
-        private val writer = Executors.newSingleThreadExecutor()
+        private val io = Executors.newSingleThreadExecutor()
 
         /** Called when a new freeze first becomes visible. */
         fun record(context: Context, bitmap: Bitmap) {
-            writer.execute {
+            io.execute {
                 try {
                     val folder = folder(context)
                     if (!folder.exists() && !folder.mkdirs()) return@execute
@@ -77,8 +77,6 @@ class RecentCapturesController(
         }
     }
 
-    private val reader = Executors.newSingleThreadExecutor()
-
     fun count(): Int = recentFiles(activity).size
 
     fun show() {
@@ -106,13 +104,9 @@ class RecentCapturesController(
             .show()
     }
 
-    fun close() {
-        reader.shutdownNow()
-    }
-
     private fun load(file: File) {
         status("Opening recent capture…")
-        reader.execute {
+        io.execute {
             val bitmap = try {
                 BitmapFactory.decodeFile(file.absolutePath)
             } catch (_: Throwable) {
@@ -139,7 +133,7 @@ class RecentCapturesController(
     }
 
     private fun clearAll() {
-        reader.execute {
+        io.execute {
             recentFiles(activity).forEach { it.delete() }
             activity.runOnUiThread { status("Recent captures cleared") }
         }
