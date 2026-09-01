@@ -8,7 +8,7 @@ import com.google.android.material.button.MaterialButton
 /**
  * Hides all app chrome so the camera/frozen image can be viewed unobstructed.
  * A transparent restore layer consumes the next tap before showing the controls again,
- * preventing that tap from accidentally focusing, zooming, enhancing, or opening the navigator.
+ * preventing that tap from accidentally focusing, zooming, enhancing, or moving the overview.
  */
 class FullViewButton @JvmOverloads constructor(
     context: Context,
@@ -55,10 +55,10 @@ class FullViewButton @JvmOverloads constructor(
         root.findViewById<View>(R.id.frozenToolsBar)?.visibility =
             if (frozen) View.VISIBLE else View.GONE
 
-        // Text/Detail/Distance are now selected automatically and stay hidden.
+        // Text/Detail/Distance are selected automatically and stay hidden.
         root.findViewById<View>(R.id.modeBar)?.visibility = View.GONE
 
-        // Keep the overview hidden after leaving Full View; a normal frozen-image tap can show it.
+        // A zoom gesture will show the overview again when navigation help is needed.
         (root.findViewById<View>(R.id.navigatorView) as? FrozenNavigatorView)?.hideImmediately()
     }
 }
