@@ -51,11 +51,16 @@ class SettingsController(
     }
 
     private fun showAreaEnhanceSettings() {
+        val choices = arrayOf(
+            "Gentle  •  subtle extra sharpening",
+            "Normal  •  balanced (recommended)",
+            "Strong  •  maximum extra sharpening"
+        )
+
         MaterialAlertDialogBuilder(activity)
             .setTitle("Area enhancement strength")
-            .setMessage("Controls the extra enhancement applied when you double-tap a zoomed frozen image.")
             .setSingleChoiceItems(
-                AppSettings.AREA_ENHANCE_LABELS,
+                choices,
                 settings.areaEnhanceIndex
             ) { dialog, which ->
                 settings.areaEnhanceIndex = which
