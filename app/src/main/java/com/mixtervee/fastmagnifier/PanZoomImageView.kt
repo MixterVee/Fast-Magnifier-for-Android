@@ -18,26 +18,26 @@ class PanZoomImageView @JvmOverloads constructor(
 ) : AppCompatImageView(context, attrs, defStyleAttr) {
 
     private var bitmapSwapGeneration = 0
-    private var lastReleasedX = Float.NaN
-    private var lastReleasedY = Float.NaN
+    private var lastReleasedRawX = Float.NaN
+    private var lastReleasedRawY = Float.NaN
 
     /**
-     * Remember where the user's last completed tap/drag ended. MainActivity's
-     * GestureDetector confirms a single tap a little later, so the navigator can
-     * use these coordinates to distinguish its designated lower-right area from
-     * the rest of the frozen image.
+     * Remember the last completed touch in screen coordinates. The frozen image
+     * itself is scaled and translated, so local event coordinates shift as the
+     * viewport moves. Screen coordinates stay stable and can be compared directly
+     * with the navigator's actual on-screen rectangle.
      */
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         if (event.actionMasked == MotionEvent.ACTION_UP) {
-            lastReleasedX = event.x
-            lastReleasedY = event.y
+            lastReleasedRawX = event.rawX
+            lastReleasedRawY = event.rawY
         }
         return super.dispatchTouchEvent(event)
     }
 
-    fun lastReleasedPosition(): Pair<Float, Float>? {
-        if (lastReleasedX.isNaN() || lastReleasedY.isNaN()) return null
-        return lastReleasedX to lastReleasedY
+    fun lastReleasedRawPosition(): Pair<Float, Float>? {
+        if (lastReleasedRawX.isNaN() || lastReleasedRawY.isNaN()) return null
+        return lastReleasedRawX to lastReleasedRawY
     }
 
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
