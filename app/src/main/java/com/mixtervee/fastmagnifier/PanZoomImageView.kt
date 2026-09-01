@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.util.AttributeSet
+import android.view.MotionEvent
 import android.view.View
 import androidx.appcompat.widget.AppCompatImageView
 import kotlin.math.max
@@ -17,6 +18,27 @@ class PanZoomImageView @JvmOverloads constructor(
 ) : AppCompatImageView(context, attrs, defStyleAttr) {
 
     private var bitmapSwapGeneration = 0
+    private var lastReleasedX = Float.NaN
+    private var lastReleasedY = Float.NaN
+
+    /**
+     * Remember where the user's last completed tap/drag ended. MainActivity's
+     * GestureDetector confirms a single tap a little later, so the navigator can
+     * use these coordinates to distinguish its designated lower-right area from
+     * the rest of the frozen image.
+     */
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_UP) {
+            lastReleasedX = event.x
+            lastReleasedY = event.y
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
+    fun lastReleasedPosition(): Pair<Float, Float>? {
+        if (lastReleasedX.isNaN() || lastReleasedY.isNaN()) return null
+        return lastReleasedX to lastReleasedY
+    }
 
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
