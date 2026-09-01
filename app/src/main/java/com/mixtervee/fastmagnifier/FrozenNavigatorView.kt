@@ -106,12 +106,26 @@ class FrozenNavigatorView @JvmOverloads constructor(
     }
 
     /**
-     * A confirmed tap on the main frozen image always means Full View under the
-     * v1.3 interaction model. Do not depend on stale overlay state here; the full
-     * screen overlays themselves own all taps once Full View is active.
+     * In the normal frozen zoomed view, the navigator's own lower-right rectangle
+     * is a designated Overview area even after the navigator has faded away.
+     * Tapping there reopens/refreshes the Overview. A confirmed tap anywhere else
+     * enters Full View.
      */
     fun showForManualTap(): Boolean {
-        if (targetImage()?.visibility != VISIBLE) return false
+        val target = targetImage() ?: return false
+        if (target.visibility != VISIBLE || target.scaleX <= 1.01f) return false
+
+        val tap = target.lastReleasedPosition()
+        val extra = dp(20f)
+        val inOverviewZone = tap != null &&
+            tap.first >= left - extra &&
+            tap.first <= right + extra &&
+            tap.second >= top - extra &&
+            tap.second <= bottom + extra
+
+        if (inOverviewZone) {
+            return showTemporarily(manualShowMs)
+        }
 
         hideImmediately()
         rootView.findViewById<View>(R.id.fullViewButton)?.performClick()
