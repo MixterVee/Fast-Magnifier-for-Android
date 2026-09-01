@@ -107,21 +107,25 @@ class FrozenNavigatorView @JvmOverloads constructor(
 
     /**
      * In the normal frozen zoomed view, the navigator's own lower-right rectangle
-     * is a designated Overview area even after the navigator has faded away.
-     * Tapping there reopens/refreshes the Overview. A confirmed tap anywhere else
-     * enters Full View.
+     * is a permanent Overview tap zone, even after the navigator fades away.
+     * Both the tap and the navigator bounds are compared in screen coordinates so
+     * zooming/panning the image cannot move the hit target out from under the user.
      */
     fun showForManualTap(): Boolean {
         val target = targetImage() ?: return false
         if (target.visibility != VISIBLE || target.scaleX <= 1.01f) return false
 
-        val tap = target.lastReleasedPosition()
-        val extra = dp(20f)
+        val tap = target.lastReleasedRawPosition()
+        val location = IntArray(2)
+        getLocationOnScreen(location)
+        val extra = dp(28f)
+        val zoneLeft = location[0].toFloat() - extra
+        val zoneTop = location[1].toFloat() - extra
+        val zoneRight = location[0] + width.toFloat() + extra
+        val zoneBottom = location[1] + height.toFloat() + extra
         val inOverviewZone = tap != null &&
-            tap.first >= left - extra &&
-            tap.first <= right + extra &&
-            tap.second >= top - extra &&
-            tap.second <= bottom + extra
+            tap.first in zoneLeft..zoneRight &&
+            tap.second in zoneTop..zoneBottom
 
         if (inOverviewZone) {
             return showTemporarily(manualShowMs)
@@ -158,7 +162,6 @@ class FrozenNavigatorView @JvmOverloads constructor(
             setOnClickListener { hideImmediately() }
         }
 
-        // Keep the navigator above its dedicated dismiss layer.
         bringToFront()
         invalidate()
         postDelayed(hideRunnable, manualShowMs)
@@ -177,8 +180,6 @@ class FrozenNavigatorView @JvmOverloads constructor(
     }
 
     private fun fadeOut() {
-        // Keep the navigator state deterministic. Animated fade-outs could leave the
-        // view VISIBLE with alpha 0 when a new show request arrived during cancellation.
         hideImmediately()
     }
 
