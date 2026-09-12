@@ -196,9 +196,6 @@ class ScreenMagnifierService : AccessibilityService() {
             scaleType = ImageView.ScaleType.MATRIX
             setBackgroundColor(Color.BLACK)
             setLayerType(View.LAYER_TYPE_HARDWARE, null)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                setFrameRate(maxDisplayRefreshRate(), View.FRAME_RATE_COMPATIBILITY_DEFAULT)
-            }
             contentDescription = "Screen magnifier lens. Drag to move. Long-press text to copy."
             setOnTouchListener { _, event -> handleLensTouch(event) }
         }
@@ -251,6 +248,8 @@ class ScreenMagnifierService : AccessibilityService() {
             gravity = Gravity.TOP or Gravity.START
             x = (metrics.widthPixels - lensWidth) / 2
             y = (metrics.heightPixels - totalHeight) / 3
+            val bestModeId = maxDisplayModeId()
+            if (bestModeId != 0) preferredDisplayModeId = bestModeId
         }
 
         runCatching {
@@ -349,11 +348,12 @@ class ScreenMagnifierService : AccessibilityService() {
 
     private fun maxDisplayRefreshRate(): Float {
         val d = display ?: return 60f
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            d.supportedModes.maxOfOrNull { it.refreshRate } ?: d.refreshRate
-        } else {
-            d.refreshRate
-        }.coerceAtLeast(30f)
+        return d.supportedModes.maxOfOrNull { it.refreshRate } ?: d.refreshRate
+    }
+
+    private fun maxDisplayModeId(): Int {
+        val d = display ?: return 0
+        return d.supportedModes.maxByOrNull { it.refreshRate }?.modeId ?: 0
     }
 
     private fun startRefreshing() {
@@ -519,7 +519,7 @@ class ScreenMagnifierService : AccessibilityService() {
             .addOnSuccessListener { result ->
                 copyInProgress = false
                 val lines = result.textBlocks.flatMap { it.lines }
-                    .filter { !it.text.isNullOrBlank() && it.boundingBox != null }
+                    .filter { it.text.isNotBlank() && it.boundingBox != null }
 
                 val selected = lines.minByOrNull { line ->
                     distanceToRectSquared(targetX, targetY, line.boundingBox!!)
