@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Fast Magnifier</string>
+    <string name="screen_magnifier_service_label">Fast Magnifier Screen Magnifier</string>
+    <string name="screen_magnifier_service_description">Magnifies content shown by other apps and lets you extract visible text when you choose Copy Text.</string>
+</resources>
