@@ -1,10 +1,12 @@
 package com.mixtervee.fastmagnifier
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.MagnificationConfig
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -50,6 +52,7 @@ class ScreenMagnifierService : AccessibilityService() {
     private var currentScale = DEFAULT_SCALE
     private var magnifierRunning = false
     private var copyInProgress = false
+    private var usingWindowMagnifier = false
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -87,14 +90,29 @@ class ScreenMagnifierService : AccessibilityService() {
 
         val metrics = resources.displayMetrics
         val controller = magnificationController
-        val scaled = controller.setScale(currentScale, false)
-        val centered = controller.setCenter(
-            metrics.widthPixels / 2f,
-            metrics.heightPixels / 2f,
-            false
-        )
 
-        if (!scaled && !centered) {
+        usingWindowMagnifier = supportsWindowMagnification()
+        val started = if (usingWindowMagnifier && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val builder = MagnificationConfig.Builder()
+                .setMode(MagnificationConfig.MAGNIFICATION_MODE_WINDOW)
+                .setScale(currentScale)
+                .setCenterX(metrics.widthPixels / 2f)
+                .setCenterY(metrics.heightPixels / 2f)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                builder.setActivated(true)
+            }
+            controller.setMagnificationConfig(builder.build(), false)
+        } else {
+            val scaled = controller.setScale(currentScale, false)
+            val centered = controller.setCenter(
+                metrics.widthPixels / 2f,
+                metrics.heightPixels / 2f,
+                false
+            )
+            scaled || centered
+        }
+
+        if (!started) {
             Toast.makeText(
                 this,
                 "Android would not start screen magnification. Check the accessibility permission.",
@@ -105,7 +123,15 @@ class ScreenMagnifierService : AccessibilityService() {
 
         magnifierRunning = true
         showControls()
-        Toast.makeText(this, "Screen Magnifier on • two-finger drag to move", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            this,
+            if (usingWindowMagnifier) {
+                "Drag the magnifier window to move • use −/+ to zoom"
+            } else {
+                "Screen Magnifier on • two-finger drag to move"
+            },
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     fun stopScreenMagnifier() {
@@ -118,10 +144,21 @@ class ScreenMagnifierService : AccessibilityService() {
         copyInProgress = false
 
         if (magnifierRunning) {
-            runCatching { magnificationController.reset(false) }
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    magnificationController.resetCurrentMagnification(false)
+                } else {
+                    magnificationController.reset(false)
+                }
+            }
         }
         magnifierRunning = false
+        usingWindowMagnifier = false
     }
+
+    private fun supportsWindowMagnification(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            packageManager.hasSystemFeature(PackageManager.FEATURE_WINDOW_MAGNIFICATION)
 
     private fun showControls() {
         if (!magnifierRunning || !::windowManager.isInitialized) return
@@ -179,7 +216,26 @@ class ScreenMagnifierService : AccessibilityService() {
         val requested = (currentScale + delta).coerceIn(MIN_SCALE, MAX_SCALE)
         if (requested == currentScale) return
 
-        if (magnificationController.setScale(requested, true)) {
+        val controller = magnificationController
+        val changed = if (usingWindowMagnifier && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val current = controller.magnificationConfig
+            val builder = MagnificationConfig.Builder()
+                .setMode(MagnificationConfig.MAGNIFICATION_MODE_WINDOW)
+                .setScale(requested)
+
+            current?.let {
+                builder.setCenterX(it.centerX)
+                builder.setCenterY(it.centerY)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                builder.setActivated(true)
+            }
+            controller.setMagnificationConfig(builder.build(), true)
+        } else {
+            controller.setScale(requested, true)
+        }
+
+        if (changed) {
             currentScale = requested
             Toast.makeText(this, String.format("%.1f×", currentScale), Toast.LENGTH_SHORT).show()
         }
