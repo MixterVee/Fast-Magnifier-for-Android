@@ -11,8 +11,8 @@ android {
         applicationId = "com.mixtervee.fastmagnifier"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "1.4.0"
+        versionCode = 22
+        versionName = "1.4.1"
     }
 
     buildFeatures {
