@@ -1,6 +1,8 @@
 package com.mixtervee.fastmagnifier
 
+import android.content.Intent
 import android.graphics.Bitmap
+import android.provider.Settings
 import android.view.WindowManager
 import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
@@ -25,6 +27,7 @@ class SettingsController(
 
     fun show() {
         val items = arrayOf(
+            "Screen Magnifier  •  magnify & copy screen text",
             "Overview time  •  ${settings.overviewLabel}",
             "Area enhance  •  ${settings.areaEnhanceLabel}",
             "Read aloud speed  •  ${settings.speechRateLabel}",
@@ -38,15 +41,38 @@ class SettingsController(
             .setItems(items) { dialog, which ->
                 dialog.dismiss()
                 when (which) {
-                    0 -> showOverviewSettings()
-                    1 -> showAreaEnhanceSettings()
-                    2 -> showSpeechRateSettings()
-                    3 -> showKeepScreenAwakeSettings()
-                    4 -> recentCaptures.show()
-                    5 -> confirmReset()
+                    0 -> showScreenMagnifier()
+                    1 -> showOverviewSettings()
+                    2 -> showAreaEnhanceSettings()
+                    3 -> showSpeechRateSettings()
+                    4 -> showKeepScreenAwakeSettings()
+                    5 -> recentCaptures.show()
+                    6 -> confirmReset()
                 }
             }
             .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun showScreenMagnifier() {
+        val service = ScreenMagnifierService.instance
+        if (service != null) {
+            service.startScreenMagnifier()
+            status("Screen Magnifier started")
+            activity.moveTaskToBack(true)
+            return
+        }
+
+        MaterialAlertDialogBuilder(activity)
+            .setTitle("Enable Screen Magnifier")
+            .setMessage(
+                "Android requires a one-time Accessibility permission so Fast Magnifier can control screen magnification and read the screen only when you press Copy Text.\n\n" +
+                    "Tap Enable, choose Fast Magnifier Screen Magnifier, turn it on, then return here and tap Screen Magnifier again."
+            )
+            .setPositiveButton("Enable") { _, _ ->
+                activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+            .setNegativeButton("Cancel") { _, _ -> show() }
             .show()
     }
 
