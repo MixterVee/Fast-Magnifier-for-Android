@@ -444,19 +444,48 @@ class ScreenMagnifierService : AccessibilityService() {
             bounds.height() <= 0 ||
             image.width <= 0 ||
             image.height <= 0 ||
-            lens.width <= 0
+            lens.width <= 0 ||
+            lens.height <= 0
         ) return
 
         val bitmapPerScreenX = bitmap.width.toFloat() / bounds.width()
         val bitmapPerScreenY = bitmap.height.toFloat() / bounds.height()
 
-        val requestedScreenCenterX = params.x + lens.width / 2f
-        val requestedScreenCenterY = params.y + image.height / 2f
+        // The lens itself stays fully on-screen, but its source position is mapped
+        // across the entire capturable window. At the far left/top the source crop
+        // touches the real left/top edge; at the far right/bottom it touches those
+        // edges. This removes the old dead zones caused by tying the source to the
+        // physical center of a large lens window.
+        val metrics = resources.displayMetrics
+        val travelX = (metrics.widthPixels - lens.width).coerceAtLeast(1)
+        val travelY = (metrics.heightPixels - lens.height).coerceAtLeast(1)
+        val fractionX = (params.x.toFloat() / travelX).coerceIn(0f, 1f)
+        val fractionY = (params.y.toFloat() / travelY).coerceIn(0f, 1f)
+
+        val halfSourceScreenWidth = (image.width / currentScale) / 2f
+        val halfSourceScreenHeight = (image.height / currentScale) / 2f
+
+        val minSourceCenterX = bounds.left + halfSourceScreenWidth
+        val maxSourceCenterX = bounds.right - halfSourceScreenWidth
+        val minSourceCenterY = bounds.top + halfSourceScreenHeight
+        val maxSourceCenterY = bounds.bottom - halfSourceScreenHeight
+
+        val requestedScreenCenterX = if (maxSourceCenterX >= minSourceCenterX) {
+            minSourceCenterX + (maxSourceCenterX - minSourceCenterX) * fractionX
+        } else {
+            bounds.exactCenterX()
+        }
+        val requestedScreenCenterY = if (maxSourceCenterY >= minSourceCenterY) {
+            minSourceCenterY + (maxSourceCenterY - minSourceCenterY) * fractionY
+        } else {
+            bounds.exactCenterY()
+        }
+
         var centerBitmapX = (requestedScreenCenterX - bounds.left) * bitmapPerScreenX
         var centerBitmapY = (requestedScreenCenterY - bounds.top) * bitmapPerScreenY
 
-        val halfSourceBitmapWidth = (image.width / currentScale) * bitmapPerScreenX / 2f
-        val halfSourceBitmapHeight = (image.height / currentScale) * bitmapPerScreenY / 2f
+        val halfSourceBitmapWidth = halfSourceScreenWidth * bitmapPerScreenX
+        val halfSourceBitmapHeight = halfSourceScreenHeight * bitmapPerScreenY
 
         centerBitmapX = if (bitmap.width > halfSourceBitmapWidth * 2f) {
             centerBitmapX.coerceIn(halfSourceBitmapWidth, bitmap.width - halfSourceBitmapWidth)
