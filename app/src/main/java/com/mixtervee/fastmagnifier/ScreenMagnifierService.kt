@@ -46,10 +46,6 @@ class ScreenMagnifierService : AccessibilityService() {
         private const val MIN_SCALE = 1.5f
         private const val MAX_SCALE = 6.0f
         private const val SCALE_STEP = 0.5f
-
-        // Android rate-limits Accessibility screenshots. We therefore move the lens
-        // from a cached full-window bitmap at touch/display speed, while refreshing
-        // the underlying bitmap independently at this safer cadence.
         private const val SCREENSHOT_REFRESH_MS = 360L
         private const val CYAN = 0xff00bcd4.toInt()
     }
@@ -121,15 +117,8 @@ class ScreenMagnifierService : AccessibilityService() {
         super.onDestroy()
     }
 
-    /**
-     * Starts our own screen lens. Returns true only if the accessibility overlay
-     * was actually attached, so callers are not told it started when it did not.
-     */
     fun startScreenMagnifier(): Boolean {
-        if (!::windowManager.isInitialized) {
-            Toast.makeText(this, "Screen Magnifier service is not ready yet", Toast.LENGTH_SHORT).show()
-            return false
-        }
+        if (!::windowManager.isInitialized) return false
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             Toast.makeText(
@@ -150,11 +139,9 @@ class ScreenMagnifierService : AccessibilityService() {
         }
 
         startRefreshing()
-
-        val hz = maxDisplayRefreshRate().roundToInt()
         Toast.makeText(
             this,
-            "Drag to move • long-press text to copy • display up to ${hz} Hz",
+            "Drag to move • long-press text to copy",
             Toast.LENGTH_LONG
         ).show()
         return true
@@ -208,7 +195,6 @@ class ScreenMagnifierService : AccessibilityService() {
         val image = ImageView(this).apply {
             scaleType = ImageView.ScaleType.MATRIX
             setBackgroundColor(Color.BLACK)
-            setLayerType(View.LAYER_TYPE_HARDWARE, null)
             contentDescription = "Screen magnifier lens. Drag to move. Long-press text to copy."
             setOnTouchListener { _, event -> handleLensTouch(event) }
         }
@@ -255,16 +241,12 @@ class ScreenMagnifierService : AccessibilityService() {
             totalHeight,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = (metrics.widthPixels - lensWidth) / 2
             y = (metrics.heightPixels - totalHeight) / 3
-            // Do NOT force preferredDisplayModeId here. Some OEM WindowManagers reject
-            // that parameter for TYPE_ACCESSIBILITY_OVERLAY. Smooth lens movement comes
-            // from cached-image GPU transforms, not from forcing a display mode.
         }
 
         return try {
@@ -333,8 +315,8 @@ class ScreenMagnifierService : AccessibilityService() {
                     params.y = (dragStartWindowY + dy).coerceIn(0, maxY)
                     runCatching { windowManager.updateViewLayout(view, params) }
 
-                    // Moving/scaling the already-cached window bitmap is cheap and follows
-                    // touch events immediately; no Accessibility screenshot is required here.
+                    // Smooth movement uses the already-cached screenshot, so dragging
+                    // never waits for a new Accessibility screenshot.
                     updateLensMatrix()
                 }
                 return true
@@ -362,11 +344,6 @@ class ScreenMagnifierService : AccessibilityService() {
     }
 
     private fun formatScale(): String = String.format("%.1f×", currentScale)
-
-    private fun maxDisplayRefreshRate(): Float {
-        val d = display ?: return 60f
-        return d.supportedModes.maxOfOrNull { it.refreshRate } ?: d.refreshRate
-    }
 
     private fun startRefreshing() {
         refreshEnabled = true
@@ -436,7 +413,11 @@ class ScreenMagnifierService : AccessibilityService() {
     }
 
     private fun installWindowBitmap(bitmap: Bitmap, windowBounds: Rect) {
-        val image = lensImage ?: return
+        val image = lensImage ?: run {
+            if (!bitmap.isRecycled) bitmap.recycle()
+            return
+        }
+
         val old = lastWindowBitmap
         lastWindowBitmap = bitmap
         lastWindowBounds = Rect(windowBounds)
@@ -505,13 +486,18 @@ class ScreenMagnifierService : AccessibilityService() {
 
     private fun handleTextLongPress(localX: Float, localY: Float) {
         if (copyInProgress || !magnifierRunning) return
+
         val source = extractLensSourceBitmap()
         if (source == null) {
             Toast.makeText(this, "Wait for the lens image to appear", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val imageView = lensImage ?: return
+        val imageView = lensImage ?: run {
+            if (!source.isRecycled) source.recycle()
+            return
+        }
+
         copyInProgress = true
 
         val boost = currentScale.coerceAtLeast(2f)
@@ -528,8 +514,6 @@ class ScreenMagnifierService : AccessibilityService() {
         recognizer.process(InputImage.fromBitmap(ocrBitmap, 0))
             .addOnSuccessListener { result ->
                 copyInProgress = false
-                if (!ocrBitmap.isRecycled) ocrBitmap.recycle()
-                if (!source.isRecycled) source.recycle()
 
                 val lines = result.textBlocks.flatMap { it.lines }
                     .filter { it.text.isNotBlank() && it.boundingBox != null }
@@ -537,6 +521,9 @@ class ScreenMagnifierService : AccessibilityService() {
                 val selected = lines.minByOrNull { line ->
                     distanceToRectSquared(targetX, targetY, line.boundingBox!!)
                 }?.text?.trim().orEmpty()
+
+                if (!ocrBitmap.isRecycled) ocrBitmap.recycle()
+                if (!source.isRecycled) source.recycle()
 
                 if (selected.isNotEmpty()) {
                     showCopyPopup(selected, localX, localY)
@@ -637,7 +624,9 @@ class ScreenMagnifierService : AccessibilityService() {
                     }
                 }
 
-                for (i in 0 until node.childCount) visit(node.getChild(i))
+                for (i in 0 until node.childCount) {
+                    visit(node.getChild(i))
+                }
             }
         }
 
@@ -692,7 +681,6 @@ class ScreenMagnifierService : AccessibilityService() {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -714,7 +702,7 @@ class ScreenMagnifierService : AccessibilityService() {
         try {
             windowManager.addView(panel, params)
             copyPopupView = panel
-        } catch (t: Throwable) {
+        } catch (_: Throwable) {
             Toast.makeText(this, "Could not show Copy", Toast.LENGTH_SHORT).show()
         }
     }
