@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -79,6 +80,8 @@ class MainActivity : AppCompatActivity() {
     private var ocrInProgress = false
 
     private var torchEnabled = false
+    private var cameraFacing = CameraSelector.LENS_FACING_BACK
+    private var cameraFlipAvailable = false
 
     enum class Mode { TEXT, DETAIL, DISTANCE }
 
@@ -131,6 +134,7 @@ class MainActivity : AppCompatActivity() {
         binding.readTextButton.setOnClickListener { readTextFromFrozen() }
         binding.saveButton.setOnClickListener { saveCurrentPicture() }
         binding.lightButton.setOnClickListener { toggleTorch() }
+        binding.cameraFlipButton.setOnClickListener { flipCamera() }
         binding.settingsButton.setOnClickListener { settingsController.show() }
         binding.exposureSlider.addOnChangeListener { _, value, fromUser ->
             if (fromUser) setExposureCompensation(value.toInt())
@@ -399,30 +403,91 @@ class MainActivity : AppCompatActivity() {
     private fun startCamera() {
         val providerFuture = ProcessCameraProvider.getInstance(this)
         providerFuture.addListener({
-            val provider = providerFuture.get()
-            val preview = Preview.Builder().build().also {
-                it.surfaceProvider = binding.previewView.surfaceProvider
+            try {
+                val provider = providerFuture.get()
+                val hasBack = runCatching { provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA) }
+                    .getOrDefault(false)
+                val hasFront = runCatching { provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) }
+                    .getOrDefault(false)
+                cameraFlipAvailable = hasBack && hasFront
+
+                var selector = cameraSelectorForFacing(cameraFacing)
+                if (!runCatching { provider.hasCamera(selector) }.getOrDefault(false)) {
+                    cameraFacing = CameraSelector.LENS_FACING_BACK
+                    selector = CameraSelector.DEFAULT_BACK_CAMERA
+                }
+
+                val preview = Preview.Builder().build().also {
+                    it.surfaceProvider = binding.previewView.surfaceProvider
+                }
+                val stillCapture = highResCaptureController.createUseCase(
+                    binding.previewView.display?.rotation ?: 0
+                )
+
+                provider.unbindAll()
+                camera = provider.bindToLifecycle(
+                    this,
+                    selector,
+                    preview,
+                    stillCapture
+                )
+                setupCameraControls()
+                binding.statusText.text = if (isFrontCamera()) {
+                    "Selfie camera ready"
+                } else {
+                    "Camera ready"
+                }
+            } catch (_: Throwable) {
+                binding.cameraFlipButton.isEnabled = false
+                binding.selfieLightFrame.visibility = View.GONE
+                binding.statusText.text = "Could not start camera"
             }
-            val stillCapture = highResCaptureController.createUseCase(
-                binding.previewView.display?.rotation ?: 0
-            )
-            provider.unbindAll()
-            camera = provider.bindToLifecycle(
-                this,
-                CameraSelector.DEFAULT_BACK_CAMERA,
-                preview,
-                stillCapture
-            )
-            setupCameraControls()
-            binding.statusText.text = "Camera ready"
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun cameraSelectorForFacing(facing: Int): CameraSelector =
+        if (facing == CameraSelector.LENS_FACING_FRONT) {
+            CameraSelector.DEFAULT_FRONT_CAMERA
+        } else {
+            CameraSelector.DEFAULT_BACK_CAMERA
+        }
+
+    private fun isFrontCamera(): Boolean = cameraFacing == CameraSelector.LENS_FACING_FRONT
+
+    private fun flipCamera() {
+        if (binding.frozenImage.visibility == View.VISIBLE || !cameraFlipAvailable) return
+
+        camera?.cameraControl?.enableTorch(false)
+        torchEnabled = false
+        cameraFacing = if (isFrontCamera()) {
+            CameraSelector.LENS_FACING_BACK
+        } else {
+            CameraSelector.LENS_FACING_FRONT
+        }
+
+        binding.cameraFlipButton.isEnabled = false
+        binding.selfieLightFrame.visibility = View.GONE
+        binding.statusText.text = if (isFrontCamera()) {
+            "Switching to selfie camera…"
+        } else {
+            "Switching to rear camera…"
+        }
+        startCamera()
     }
 
     private fun setupCameraControls() {
         val c = camera ?: return
+        val frozen = binding.frozenImage.visibility == View.VISIBLE
+
+        binding.cameraFlipButton.isEnabled = cameraFlipAvailable && !frozen
+        binding.cameraFlipButton.contentDescription = if (isFrontCamera()) {
+            "Switch to rear camera"
+        } else {
+            "Switch to selfie camera"
+        }
 
         val hasLight = c.cameraInfo.hasFlashUnit()
-        binding.lightButton.isEnabled = hasLight
+        binding.lightButton.isEnabled = hasLight && !frozen
         binding.lightButton.text = when {
             !hasLight -> "No Light"
             torchEnabled -> "Light On"
@@ -431,11 +496,12 @@ class MainActivity : AppCompatActivity() {
         if (hasLight && torchEnabled) {
             c.cameraControl.enableTorch(true)
         }
+        updateSelfieFillLight()
 
         val exposureState = c.cameraInfo.exposureState
         val range = exposureState.exposureCompensationRange
         if (exposureState.isExposureCompensationSupported && range.lower < range.upper) {
-            binding.exposureSlider.isEnabled = binding.frozenImage.visibility != View.VISIBLE
+            binding.exposureSlider.isEnabled = !frozen
             binding.exposureSlider.valueFrom = range.lower.toFloat()
             binding.exposureSlider.valueTo = range.upper.toFloat()
             binding.exposureSlider.stepSize = 1f
@@ -448,11 +514,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateSelfieFillLight() {
+        binding.selfieLightFrame.visibility = if (
+            isFrontCamera() &&
+            !torchEnabled &&
+            binding.frozenImage.visibility != View.VISIBLE &&
+            binding.previewView.visibility == View.VISIBLE
+        ) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+    }
+
     private fun toggleTorch() {
         val c = camera ?: return
         if (!c.cameraInfo.hasFlashUnit()) {
             binding.lightButton.isEnabled = false
             binding.lightButton.text = "No Light"
+            updateSelfieFillLight()
             return
         }
 
@@ -469,6 +549,7 @@ class MainActivity : AppCompatActivity() {
                 binding.statusText.text = "Could not change camera light"
             } finally {
                 binding.lightButton.isEnabled = true
+                updateSelfieFillLight()
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -578,7 +659,7 @@ class MainActivity : AppCompatActivity() {
                         "Focus adjusted"
                     }
                 } catch (_: Throwable) {
-                    binding.statusText.text = "Camera ready"
+                    binding.statusText.text = if (isFrontCamera()) "Selfie camera ready" else "Camera ready"
                 }
             }
 
@@ -652,7 +733,9 @@ class MainActivity : AppCompatActivity() {
         binding.frozenImage.visibility = View.VISIBLE
         binding.navigatorView.hideImmediately()
         binding.previewView.visibility = View.GONE
+        binding.selfieLightFrame.visibility = View.GONE
         binding.focusRing.visibility = View.GONE
+        binding.cameraFlipButton.isEnabled = false
         binding.freezeButton.text = "Resume"
         binding.toggleButton.isEnabled = false
         binding.toggleButton.text = "Original"
@@ -669,12 +752,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun captureHighResolutionUpgrade(sessionId: Int) {
         val selectedMode = mode
+        val selectedFacing = cameraFacing
         highResCaptureController.capture(
             onReady = { qualitySource ->
                 if (
                     sessionId != freezeSessionId ||
                     binding.frozenImage.visibility != View.VISIBLE ||
                     mode != selectedMode ||
+                    cameraFacing != selectedFacing ||
                     areaEnhancePasses > 0 ||
                     areaEnhanceInProgress
                 ) {
@@ -683,12 +768,18 @@ class MainActivity : AppCompatActivity() {
 
                 worker.execute {
                     try {
-                        val qualityEnhanced = fastEnhance(qualitySource, selectedMode)
+                        val preparedSource = if (selectedFacing == CameraSelector.LENS_FACING_FRONT) {
+                            mirrorHorizontal(qualitySource)
+                        } else {
+                            qualitySource
+                        }
+                        val qualityEnhanced = fastEnhance(preparedSource, selectedMode)
                         runOnUiThread {
                             if (
                                 sessionId != freezeSessionId ||
                                 binding.frozenImage.visibility != View.VISIBLE ||
                                 mode != selectedMode ||
+                                cameraFacing != selectedFacing ||
                                 areaEnhancePasses > 0 ||
                                 areaEnhanceInProgress
                             ) {
@@ -696,12 +787,12 @@ class MainActivity : AppCompatActivity() {
                             }
 
                             val displayEnhanced = showingEnhanced
-                            original = qualitySource
+                            original = preparedSource
                             enhanced = qualityEnhanced
                             resetAreaEnhanceHistory()
                             showingEnhanced = displayEnhanced
                             binding.frozenImage.setImageBitmap(
-                                if (showingEnhanced) qualityEnhanced else qualitySource
+                                if (showingEnhanced) qualityEnhanced else preparedSource
                             )
                             binding.frozenImage.clampPan()
                             binding.toggleButton.isEnabled = true
@@ -745,7 +836,7 @@ class MainActivity : AppCompatActivity() {
         binding.readTextButton.isEnabled = false
         binding.saveButton.isEnabled = false
         setupCameraControls()
-        binding.statusText.text = "Camera ready"
+        binding.statusText.text = if (isFrontCamera()) "Selfie camera ready" else "Camera ready"
     }
 
     private fun enhanceFrozen() {
@@ -885,6 +976,21 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun mirrorHorizontal(source: Bitmap): Bitmap {
+        val matrix = Matrix().apply {
+            setScale(-1f, 1f, source.width / 2f, source.height / 2f)
+        }
+        return Bitmap.createBitmap(
+            source,
+            0,
+            0,
+            source.width,
+            source.height,
+            matrix,
+            true
+        )
     }
 
     private fun scaleForSpeed(src: Bitmap): Bitmap {
