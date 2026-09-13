@@ -174,6 +174,34 @@ class ScreenMagnifierService : AccessibilityService() {
         if (old != null && !old.isRecycled) old.recycle()
     }
 
+    private fun returnToMainMenu() {
+        stopScreenMagnifier()
+        startActivity(
+            Intent(this, LauncherActivity::class.java).apply {
+                action = LauncherActivity.ACTION_SHOW_CHOOSER
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
+            }
+        )
+    }
+
+    private fun exitApplication() {
+        stopScreenMagnifier()
+        startActivity(
+            Intent(this, LauncherActivity::class.java).apply {
+                action = LauncherActivity.ACTION_EXIT_APP
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
+            }
+        )
+    }
+
     private fun showLens(): Boolean {
         val metrics = resources.displayMetrics
         val lensWidth = (metrics.widthPixels * 0.72f).toInt()
@@ -227,7 +255,8 @@ class ScreenMagnifierService : AccessibilityService() {
         )
 
         controls.addView(controlButton("+") { changeScale(SCALE_STEP) })
-        controls.addView(controlButton("Exit") { stopScreenMagnifier() })
+        controls.addView(controlButton("Back") { returnToMainMenu() })
+        controls.addView(controlButton("Exit") { exitApplication() })
         container.addView(
             controls,
             LinearLayout.LayoutParams(
