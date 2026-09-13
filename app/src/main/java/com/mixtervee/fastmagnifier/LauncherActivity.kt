@@ -25,11 +25,21 @@ class LauncherActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!waitingForAccessibility) return
 
-        // The Accessibility service can take a moment to reconnect after the user
-        // enables it. Retry briefly so returning with Back feels automatic.
-        tryStartScreenMagnifier(0)
+        if (waitingForAccessibility) {
+            // The Accessibility service can take a moment to reconnect after the user
+            // enables it. Retry briefly so returning with Back feels automatic.
+            tryStartScreenMagnifier(0)
+            return
+        }
+
+        // Choosing Screen Magnifier backgrounds this activity but intentionally leaves
+        // it alive. If the user later exits the lens and reopens Fast Magnifier, Android
+        // resumes this same activity instance. Restore the chooser instead of leaving the
+        // activity with no content/dialog (which appears as a black screen).
+        if (!chooserShowing) {
+            showModeChooser()
+        }
     }
 
     override fun onDestroy() {
