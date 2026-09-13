@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
@@ -65,7 +64,7 @@ class LauncherActivity : AppCompatActivity() {
     private fun chooseScreenMagnifier() {
         val service = ScreenMagnifierService.instance
         if (service != null) {
-            backgroundThenStartLens()
+            startLensThenBackground(service)
             return
         }
 
@@ -92,7 +91,7 @@ class LauncherActivity : AppCompatActivity() {
         val service = ScreenMagnifierService.instance
         if (service != null) {
             waitingForAccessibility = false
-            backgroundThenStartLens()
+            startLensThenBackground(service)
             return
         }
 
@@ -113,26 +112,16 @@ class LauncherActivity : AppCompatActivity() {
     }
 
     /**
-     * On some phones an accessibility overlay created while its own launcher is
-     * still the foreground window can be dropped as that task is immediately
-     * backgrounded. Put Fast Magnifier in the background first, then attach the
-     * lens after the foreground transition has settled.
+     * Create the accessibility overlay while this activity is definitely alive,
+     * then move the task to the background after the lens has had a chance to attach.
+     * This avoids losing a delayed callback when some OEMs destroy the launcher as
+     * soon as moveTaskToBack() is called.
      */
-    private fun backgroundThenStartLens() {
+    private fun startLensThenBackground(service: ScreenMagnifierService) {
         waitingForAccessibility = false
-        moveTaskToBack(true)
+        service.startScreenMagnifier()
         handler.postDelayed({
-            val service = ScreenMagnifierService.instance
-            if (service == null) {
-                Toast.makeText(
-                    applicationContext,
-                    "Screen Magnifier service disconnected",
-                    Toast.LENGTH_LONG
-                ).show()
-                return@postDelayed
-            }
-
-            service.startScreenMagnifier()
-        }, 250L)
+            if (!isFinishing) moveTaskToBack(true)
+        }, 220L)
     }
 }
