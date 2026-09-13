@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
@@ -64,15 +65,14 @@ class LauncherActivity : AppCompatActivity() {
     private fun chooseScreenMagnifier() {
         val service = ScreenMagnifierService.instance
         if (service != null) {
-            service.startScreenMagnifier()
-            moveTaskToBack(true)
+            backgroundThenStartLens()
             return
         }
 
         MaterialAlertDialogBuilder(this)
             .setTitle("Enable Screen Magnifier")
             .setMessage(
-                "Android requires a one-time Accessibility permission so Fast Magnifier can magnify other apps and read screen text only when you press Copy Text.\n\n" +
+                "Android requires a one-time Accessibility permission so Fast Magnifier can magnify other apps and read screen text when you long-press inside the lens.\n\n" +
                     "Tap Enable, choose Fast Magnifier Screen Magnifier, turn it on, then press Back. Screen Magnifier should start automatically."
             )
             .setPositiveButton("Enable") { _, _ ->
@@ -92,8 +92,7 @@ class LauncherActivity : AppCompatActivity() {
         val service = ScreenMagnifierService.instance
         if (service != null) {
             waitingForAccessibility = false
-            service.startScreenMagnifier()
-            moveTaskToBack(true)
+            backgroundThenStartLens()
             return
         }
 
@@ -111,5 +110,29 @@ class LauncherActivity : AppCompatActivity() {
                 }
                 .show()
         }
+    }
+
+    /**
+     * On some phones an accessibility overlay created while its own launcher is
+     * still the foreground window can be dropped as that task is immediately
+     * backgrounded. Put Fast Magnifier in the background first, then attach the
+     * lens after the foreground transition has settled.
+     */
+    private fun backgroundThenStartLens() {
+        waitingForAccessibility = false
+        moveTaskToBack(true)
+        handler.postDelayed({
+            val service = ScreenMagnifierService.instance
+            if (service == null) {
+                Toast.makeText(
+                    applicationContext,
+                    "Screen Magnifier service disconnected",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@postDelayed
+            }
+
+            service.startScreenMagnifier()
+        }, 250L)
     }
 }
