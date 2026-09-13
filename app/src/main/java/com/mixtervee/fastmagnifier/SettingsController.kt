@@ -2,6 +2,8 @@ package com.mixtervee.fastmagnifier
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.WindowManager
 import android.widget.ImageView
@@ -57,16 +59,18 @@ class SettingsController(
     private fun showScreenMagnifier() {
         val service = ScreenMagnifierService.instance
         if (service != null) {
-            service.startScreenMagnifier()
-            status("Screen Magnifier started")
+            status("Starting Screen Magnifier…")
             activity.moveTaskToBack(true)
+            Handler(Looper.getMainLooper()).postDelayed({
+                ScreenMagnifierService.instance?.startScreenMagnifier()
+            }, 250L)
             return
         }
 
         MaterialAlertDialogBuilder(activity)
             .setTitle("Enable Screen Magnifier")
             .setMessage(
-                "Android requires a one-time Accessibility permission so Fast Magnifier can control screen magnification and read the screen only when you press Copy Text.\n\n" +
+                "Android requires a one-time Accessibility permission so Fast Magnifier can magnify other apps and read text when you long-press inside the lens.\n\n" +
                     "Tap Enable, choose Fast Magnifier Screen Magnifier, turn it on, then return here and tap Screen Magnifier again."
             )
             .setPositiveButton("Enable") { _, _ ->
