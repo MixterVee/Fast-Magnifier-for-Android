@@ -64,7 +64,8 @@ class LauncherActivity : AppCompatActivity() {
     private fun chooseScreenMagnifier() {
         val service = ScreenMagnifierService.instance
         if (service != null) {
-            startLensThenBackground(service)
+            service.startScreenMagnifier()
+            moveTaskToBack(true)
             return
         }
 
@@ -91,7 +92,8 @@ class LauncherActivity : AppCompatActivity() {
         val service = ScreenMagnifierService.instance
         if (service != null) {
             waitingForAccessibility = false
-            startLensThenBackground(service)
+            service.startScreenMagnifier()
+            moveTaskToBack(true)
             return
         }
 
@@ -109,19 +111,5 @@ class LauncherActivity : AppCompatActivity() {
                 }
                 .show()
         }
-    }
-
-    /**
-     * Create the accessibility overlay while this activity is definitely alive,
-     * then move the task to the background after the lens has had a chance to attach.
-     * This avoids losing a delayed callback when some OEMs destroy the launcher as
-     * soon as moveTaskToBack() is called.
-     */
-    private fun startLensThenBackground(service: ScreenMagnifierService) {
-        waitingForAccessibility = false
-        service.startScreenMagnifier()
-        handler.postDelayed({
-            if (!isFinishing) moveTaskToBack(true)
-        }, 220L)
     }
 }
