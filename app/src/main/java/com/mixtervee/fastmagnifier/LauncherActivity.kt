@@ -14,17 +14,32 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
  */
 class LauncherActivity : AppCompatActivity() {
 
+    companion object {
+        const val ACTION_SHOW_CHOOSER = "com.mixtervee.fastmagnifier.action.SHOW_CHOOSER"
+        const val ACTION_EXIT_APP = "com.mixtervee.fastmagnifier.action.EXIT_APP"
+    }
+
     private val handler = Handler(Looper.getMainLooper())
     private var waitingForAccessibility = false
     private var chooserShowing = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        showModeChooser()
+        if (!handleNavigationAction(intent)) {
+            showModeChooser()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNavigationAction(intent)
     }
 
     override fun onResume() {
         super.onResume()
+
+        if (isFinishing) return
 
         if (waitingForAccessibility) {
             // The Accessibility service can take a moment to reconnect after the user
@@ -34,9 +49,7 @@ class LauncherActivity : AppCompatActivity() {
         }
 
         // Choosing Screen Magnifier backgrounds this activity but intentionally leaves
-        // it alive. If the user later exits the lens and reopens Fast Magnifier, Android
-        // resumes this same activity instance. Restore the chooser instead of leaving the
-        // activity with no content/dialog (which appears as a black screen).
+        // it alive so the service can explicitly bring the chooser back with Back.
         if (!chooserShowing) {
             showModeChooser()
         }
@@ -45,6 +58,27 @@ class LauncherActivity : AppCompatActivity() {
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
+    }
+
+    private fun handleNavigationAction(intent: Intent?): Boolean {
+        return when (intent?.action) {
+            ACTION_SHOW_CHOOSER -> {
+                waitingForAccessibility = false
+                chooserShowing = false
+                showModeChooser()
+                true
+            }
+
+            ACTION_EXIT_APP -> {
+                waitingForAccessibility = false
+                chooserShowing = false
+                handler.removeCallbacksAndMessages(null)
+                finishAndRemoveTask()
+                true
+            }
+
+            else -> false
+        }
     }
 
     private fun showModeChooser() {
