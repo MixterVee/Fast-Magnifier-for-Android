@@ -35,15 +35,18 @@ jobs:
       - name: Apply WebView tap compatibility
         run: python3 tools/apply_webview_tap_fix.py
 
+      - name: Apply corner resize handles and exact tap mapping
+        run: python3 tools/apply_corner_resize_mapping_fix.py
+
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Fast-Magnifier-v1.5.5-debug.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk Fast-Magnifier-v1.5.6-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Fast-Magnifier-v1.5.5-APK
-          path: Fast-Magnifier-v1.5.5-debug.apk
+          name: Fast-Magnifier-v1.5.6-APK
+          path: Fast-Magnifier-v1.5.6-debug.apk
           if-no-files-found: error
