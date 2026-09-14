@@ -29,7 +29,7 @@ class SettingsController(
 
     fun show() {
         val items = arrayOf(
-            "Screen Magnifier  •  magnify & copy screen text",
+            "Screen Magnifier  •  magnify, tap links & copy text",
             "Overview time  •  ${settings.overviewLabel}",
             "Area enhance  •  ${settings.areaEnhanceLabel}",
             "Read aloud speed  •  ${settings.speechRateLabel}",
