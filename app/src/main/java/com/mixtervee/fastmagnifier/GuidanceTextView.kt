@@ -82,6 +82,10 @@ class GuidanceTextView @JvmOverloads constructor(
             "slide up/down",
             "slide zoom",
             "slide up to zoom",
+            "pinch to zoom",
+            "pinch zoom",
+            "drag to move",
+            "drag move",
             "tap focus",
             "tap image",
             "tap overview",
@@ -115,7 +119,7 @@ class GuidanceTextView @JvmOverloads constructor(
         val frozen = frozenImage?.visibility == View.VISIBLE
 
         if (!frozen) {
-            return "Slide ↑/↓ Zoom   •   Tap Focus   •   Hold Freeze"
+            return "Pinch Zoom   •   Tap Focus   •   Hold Freeze"
         }
 
         val zoomed = (frozenImage?.scaleX ?: 1f) > 1.01f
@@ -127,16 +131,20 @@ class GuidanceTextView @JvmOverloads constructor(
             raw.contains("Maximum", ignoreCase = true)
 
         val actions = mutableListOf<String>()
-        actions += "Slide ↑/↓ Zoom"
-        actions += "Tap Full View"
+        actions += "Pinch Zoom"
 
         if (zoomed) {
+            actions += "Drag Move"
+            actions += "Tap Overview"
             if (!maxReached) actions += "Double-tap Enhance"
             if (canRead) actions += "Read Text (view)"
-        } else if (canRead) {
-            actions += "Read Text (full image)"
         } else {
-            actions += "OCR after enhancement"
+            actions += "Tap Full View"
+            if (canRead) {
+                actions += "Read Text (full image)"
+            } else {
+                actions += "OCR after enhancement"
+            }
         }
 
         if (canUndo) actions += "Undo"
