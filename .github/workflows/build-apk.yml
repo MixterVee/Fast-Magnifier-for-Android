@@ -29,15 +29,18 @@ jobs:
       - name: Apply screen magnifier tap-through
         run: python3 tools/apply_screen_tap_patch.py
 
+      - name: Apply safe tap fallback
+        run: python3 tools/apply_screen_tap_fix.py
+
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Fast-Magnifier-v1.5.2-debug.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk Fast-Magnifier-v1.5.3-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Fast-Magnifier-v1.5.2-APK
-          path: Fast-Magnifier-v1.5.2-debug.apk
+          name: Fast-Magnifier-v1.5.3-APK
+          path: Fast-Magnifier-v1.5.3-debug.apk
           if-no-files-found: error
