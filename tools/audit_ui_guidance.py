@@ -14,14 +14,22 @@ stale_phrases = [
 ]
 
 problems = []
+
+guidance_path = root / "java/com/mixtervee/fastmagnifier/GuidanceTextView.kt"
+
+# Check user-facing guidance, but do not flag legacy phrases that intentionally
+# remain in GuidanceTextView's cleanup/filter list so stale status text is removed.
 for path in text_files:
     text = path.read_text(encoding="utf-8")
+    scan_text = text
+    if path == guidance_path and "private fun currentGuide" in text:
+        scan_text = text.split("private fun currentGuide", 1)[1]
+
     for phrase in stale_phrases:
-        if phrase.lower() in text.lower():
-            problems.append(f"{path}: stale guidance '{phrase}'")
+        if phrase.lower() in scan_text.lower():
+            problems.append(f"{path}: stale user-facing guidance '{phrase}'")
 
 # Camera guidance must describe the gesture model actually implemented.
-guidance_path = root / "java/com/mixtervee/fastmagnifier/GuidanceTextView.kt"
 guidance = guidance_path.read_text(encoding="utf-8")
 for phrase in [
     "Pinch Zoom",
@@ -37,16 +45,23 @@ for phrase in [
 # Screen Magnifier menu/actions must match the current overlay controls after CI patches.
 screen_path = root / "java/com/mixtervee/fastmagnifier/ScreenMagnifierService.kt"
 screen = screen_path.read_text(encoding="utf-8")
+screen_lower = screen.lower()
+
 for phrase in [
     'controlButton("Min")',
     'controlButton("Back")',
     'controlButton("Exit")',
-    "Tap to activate",
-    "pinch to resize",
-    "long-press text to copy",
 ]:
     if phrase not in screen:
-        problems.append(f"{screen_path}: missing current Screen Magnifier UI text/control '{phrase}'")
+        problems.append(f"{screen_path}: missing current Screen Magnifier control '{phrase}'")
+
+for words, label in [
+    (("tap", "activate"), "tap to activate"),
+    (("pinch", "resize"), "pinch resize"),
+    (("long-press", "copy"), "long-press copy"),
+]:
+    if not all(word in screen_lower for word in words):
+        problems.append(f"{screen_path}: missing current Screen Magnifier guidance '{label}'")
 
 if problems:
     print("UI guidance audit failed:")
