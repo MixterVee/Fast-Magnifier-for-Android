@@ -26,6 +26,9 @@ jobs:
       - name: Apply selfie brightness and rear LED assist
         run: python3 tools/apply_selfie_light_patch.py
 
+      - name: Apply camera pinch zoom and one-finger pan
+        run: python3 tools/apply_camera_pinch_pan_fix.py
+
       - name: Apply screen magnifier tap-through
         run: python3 tools/apply_screen_tap_patch.py
 
@@ -51,11 +54,11 @@ jobs:
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Fast-Magnifier-v1.6.0-debug.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk Fast-Magnifier-v1.6.1-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Fast-Magnifier-v1.6.0-APK
-          path: Fast-Magnifier-v1.6.0-debug.apk
+          name: Fast-Magnifier-v1.6.1-APK
+          path: Fast-Magnifier-v1.6.1-debug.apk
           if-no-files-found: error
