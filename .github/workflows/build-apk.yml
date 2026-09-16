@@ -53,6 +53,9 @@ jobs:
       - name: Add minimized floating restore bubble
         run: python3 tools/apply_minimize_bubble_patch.py
 
+      - name: Add QR and barcode recognition
+        run: python3 tools/apply_barcode_scanning_patch.py
+
       - name: Audit UI guidance
         run: python3 tools/audit_ui_guidance.py
 
@@ -60,11 +63,11 @@ jobs:
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Fast-Magnifier-v1.6.3-debug.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk Fast-Magnifier-v1.7.0-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Fast-Magnifier-v1.6.3-APK
-          path: Fast-Magnifier-v1.6.3-debug.apk
+          name: Fast-Magnifier-v1.7.0-APK
+          path: Fast-Magnifier-v1.7.0-debug.apk
           if-no-files-found: error
