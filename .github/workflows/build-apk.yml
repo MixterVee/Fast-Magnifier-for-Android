@@ -53,6 +53,9 @@ jobs:
       - name: Add minimized floating restore bubble
         run: python3 tools/apply_minimize_bubble_patch.py
 
+      - name: Prepare barcode patch compatibility
+        run: python3 tools/prepare_barcode_patch_compat.py
+
       - name: Add QR and barcode recognition
         run: python3 tools/apply_barcode_scanning_patch.py
 
