@@ -47,13 +47,15 @@ screen_path = root / "java/com/mixtervee/fastmagnifier/ScreenMagnifierService.kt
 screen = screen_path.read_text(encoding="utf-8")
 screen_lower = screen.lower()
 
-for phrase in [
-    'controlButton("Min")',
-    'controlButton("Back")',
-    'controlButton("Exit")',
-]:
-    if phrase not in screen:
-        problems.append(f"{screen_path}: missing current Screen Magnifier control '{phrase}'")
+# Controls may be added directly with controlButton(...) or through the newer
+# equal-width addEqualControl(...) helper. Accept either representation.
+for label in ["Min", "Back", "Exit"]:
+    direct = f'controlButton("{label}")'
+    equal = f'addEqualControl("{label}")'
+    if direct not in screen and equal not in screen:
+        problems.append(
+            f"{screen_path}: missing current Screen Magnifier control '{label}'"
+        )
 
 for words, label in [
     (("tap", "activate"), "tap to activate"),
