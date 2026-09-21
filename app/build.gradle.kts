@@ -5,14 +5,14 @@ plugins {
 
 android {
     namespace = "com.mixtervee.fastmagnifier"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.mixtervee.fastmagnifier"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 31
-        versionName = "1.5.0"
+        targetSdk = 36
+        versionCode = 32
+        versionName = "1.8.0-beta1"
     }
 
     buildFeatures {
