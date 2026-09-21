@@ -21,7 +21,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.10.2'
+          gradle-version: '8.11.1'
 
       - name: Audit UI guidance
         run: python3 tools/audit_ui_guidance.py
@@ -30,11 +30,11 @@ jobs:
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Fast-Magnifier-v1.7.5-clean-debug.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk Fast-Magnifier-v1.8.0-beta1-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Fast-Magnifier-v1.7.5-clean-APK
-          path: Fast-Magnifier-v1.7.5-clean-debug.apk
+          name: Fast-Magnifier-v1.8.0-beta1-APK
+          path: Fast-Magnifier-v1.8.0-beta1-debug.apk
           if-no-files-found: error
