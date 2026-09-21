@@ -59,7 +59,7 @@ class ScreenMagnifierService : AccessibilityService() {
     private val recognizer by lazy {
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     }
-    private val barcodeScanner by lazy { BarcodeScannerController() }
+    private val barcodeScanner by lazy { BarcodeScannerController(this) }
 
     private var lensView: View? = null
     private var lensImage: ImageView? = null
