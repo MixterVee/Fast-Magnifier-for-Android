@@ -6,7 +6,7 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="Fast Magnifier"
+        android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.FastMagnifier">
 
