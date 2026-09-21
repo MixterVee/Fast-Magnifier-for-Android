@@ -73,14 +73,14 @@ class OcrController(
             .addOnSuccessListener { result ->
                 val text = result.text.trim()
                 if (text.isBlank()) {
-                    status("No text recognized in $sourceLabel")
+                    status(activity.getString(R.string.no_text_recognized, sourceLabel))
                 } else {
-                    status("Text recognized from $sourceLabel")
+                    status(activity.getString(R.string.text_recognized, sourceLabel))
                     showResult(text)
                 }
             }
             .addOnFailureListener { error ->
-                status("Text recognition failed: ${error.javaClass.simpleName}")
+                status(activity.getString(R.string.text_recognition_failed, error.javaClass.simpleName))
             }
             .addOnCompleteListener {
                 onFinished()
@@ -165,7 +165,7 @@ class OcrController(
             override fun onError(utteranceId: String?) {
                 activity.runOnUiThread {
                     stopSpeech(updateStatus = false)
-                    status("Could not read recognized text aloud")
+                    status(activity.getString(R.string.could_not_read_aloud))
                 }
             }
 
@@ -177,7 +177,7 @@ class OcrController(
 
     private fun startSpeech(text: String) {
         if (!ttsReady || textToSpeech == null) {
-            status("Text-to-speech voice is not ready on this device")
+            status(activity.getString(R.string.tts_not_ready))
             return
         }
 
@@ -191,7 +191,7 @@ class OcrController(
         speechStopped = false
         speakButton?.text = activity.getString(R.string.pause)
         stopSpeechButton?.isEnabled = true
-        status("Reading recognized text aloud")
+        status(activity.getString(R.string.reading_aloud))
         speakCurrentChunk()
     }
 
@@ -201,7 +201,7 @@ class OcrController(
         speechPaused = true
         speakButton?.text = activity.getString(R.string.resume_reading)
         stopSpeechButton?.isEnabled = true
-        status("Reading paused")
+        status(activity.getString(R.string.reading_paused))
     }
 
     private fun resumeSpeech() {
@@ -209,7 +209,7 @@ class OcrController(
         speechPaused = false
         speakButton?.text = activity.getString(R.string.pause)
         stopSpeechButton?.isEnabled = true
-        status("Reading recognized text aloud")
+        status(activity.getString(R.string.reading_aloud))
         speakCurrentChunk()
     }
 
@@ -223,7 +223,7 @@ class OcrController(
         speakButton?.text = activity.getString(R.string.read_aloud)
         speakButton?.isEnabled = ttsReady
         stopSpeechButton?.isEnabled = false
-        if (updateStatus) status("Reading stopped")
+        if (updateStatus) status(activity.getString(R.string.reading_stopped))
     }
 
     private fun finishSpeech() {
@@ -234,7 +234,7 @@ class OcrController(
         speakButton?.text = activity.getString(R.string.read_aloud)
         speakButton?.isEnabled = ttsReady
         stopSpeechButton?.isEnabled = false
-        status("Finished reading recognized text")
+        status(activity.getString(R.string.finished_reading))
     }
 
     private fun speakCurrentChunk() {
@@ -282,20 +282,20 @@ class OcrController(
     private fun copyText(text: String) {
         val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(activity.getString(R.string.ocr_title), text))
-        status("Recognized text copied")
+        status(activity.getString(R.string.recognized_text_copied))
     }
 
     private fun shareText(text: String) {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "Fast Magnifier recognized text")
+            putExtra(Intent.EXTRA_SUBJECT, activity.getString(R.string.recognized_text_subject))
             putExtra(Intent.EXTRA_TEXT, text)
         }
         activity.startActivity(Intent.createChooser(intent, activity.getString(R.string.share)))
     }
 
     private fun saveText(text: String) {
-        status("Saving recognized text…")
+        status(activity.getString(R.string.saving_recognized_text))
         Thread {
             try {
                 val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
@@ -304,7 +304,7 @@ class OcrController(
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     saveWithMediaStore(name, text)
                     activity.runOnUiThread {
-                        status("Text saved to Documents/Fast Magnifier/OCR")
+                        status(activity.getString(R.string.text_saved_documents))
                     }
                 } else {
                     val base = activity.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
@@ -313,12 +313,12 @@ class OcrController(
                     if (!folder.exists() && !folder.mkdirs()) error("Could not create OCR folder")
                     File(folder, name).writeText(text, Charsets.UTF_8)
                     activity.runOnUiThread {
-                        status("Text saved to app Documents/Fast Magnifier/OCR")
+                        status(activity.getString(R.string.text_saved_app_documents))
                     }
                 }
             } catch (t: Throwable) {
                 activity.runOnUiThread {
-                    status("Text save failed: ${t.javaClass.simpleName}")
+                    status(activity.getString(R.string.text_save_failed, t.javaClass.simpleName))
                 }
             }
         }.start()
