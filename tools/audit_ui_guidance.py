@@ -29,41 +29,74 @@ for path in text_files:
         if phrase.lower() in scan_text.lower():
             problems.append(f"{path}: stale user-facing guidance '{phrase}'")
 
-# Camera guidance must describe the gesture model actually implemented.
 guidance = guidance_path.read_text(encoding="utf-8")
-for phrase in [
+
+# Guidance can be embedded English text in older source or supplied by localized
+# Android string resources in release/beta source.
+localized_guidance_ids = [
+    "R.string.guide_live",
+    "R.string.guide_pinch_zoom",
+    "R.string.guide_drag_move",
+    "R.string.guide_tap_overview",
+    "R.string.guide_tap_full_view",
+]
+legacy_guidance = [
     "Pinch Zoom",
     "Tap Focus",
     "Hold Freeze",
     "Drag Move",
     "Tap Overview",
     "Tap Full View",
-]:
-    if phrase not in guidance:
-        problems.append(f"{guidance_path}: missing expected guidance '{phrase}'")
+]
 
-# Screen Magnifier menu/actions must match the current overlay controls after CI patches.
+if not (
+    all(resource_id in guidance for resource_id in localized_guidance_ids)
+    or all(phrase in guidance for phrase in legacy_guidance)
+):
+    problems.append(
+        f"{guidance_path}: camera gesture guidance is incomplete"
+    )
+
 screen_path = root / "java/com/mixtervee/fastmagnifier/ScreenMagnifierService.kt"
 screen = screen_path.read_text(encoding="utf-8")
 screen_lower = screen.lower()
 
-# Controls may be added directly with controlButton(...) or through the newer
-# equal-width addEqualControl(...) helper. Accept either representation.
-for label in ["Min", "Back", "Exit"]:
-    direct = f'controlButton("{label}")'
-    equal = f'addEqualControl("{label}")'
-    if direct not in screen and equal not in screen:
+# Screen controls may be direct labels, equal-width labels, or localized resources.
+control_options = {
+    "Min": [
+        'controlButton("Min")',
+        'addEqualControl("Min")',
+        "R.string.minimize_short",
+    ],
+    "Back": [
+        'controlButton("Back")',
+        'addEqualControl("Back")',
+        "R.string.back",
+    ],
+    "Exit": [
+        'controlButton("Exit")',
+        'addEqualControl("Exit")',
+        "R.string.exit",
+    ],
+}
+for label, options in control_options.items():
+    if not any(option in screen for option in options):
         problems.append(
             f"{screen_path}: missing current Screen Magnifier control '{label}'"
         )
 
-for words, label in [
-    (("tap", "activate"), "tap to activate"),
-    (("pinch", "resize"), "pinch resize"),
-    (("long-press", "copy"), "long-press copy"),
-]:
-    if not all(word in screen_lower for word in words):
-        problems.append(f"{screen_path}: missing current Screen Magnifier guidance '{label}'")
+# The screen gesture hint can likewise be literal or resource based.
+literal_screen_guide = all(
+    word in screen_lower for word in ("tap", "activate", "pinch", "resize", "long-press", "copy")
+)
+resource_screen_guide = (
+    "R.string.screen_usage_hint" in screen
+    and "R.string.screen_lens_description" in screen
+)
+if not literal_screen_guide and not resource_screen_guide:
+    problems.append(
+        f"{screen_path}: missing current Screen Magnifier gesture guidance"
+    )
 
 if problems:
     print("UI guidance audit failed:")
