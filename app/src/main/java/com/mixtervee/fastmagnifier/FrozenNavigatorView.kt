@@ -218,7 +218,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
                     dragOffsetY = 0f
                 }
                 moveTarget(target, event.x - dragOffsetX, event.y - dragOffsetY)
-                setStatus("Moving overview")
+                setStatus(context.getString(R.string.moving_overview))
                 return true
             }
 
@@ -230,7 +230,7 @@ class FrozenNavigatorView @JvmOverloads constructor(
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 moveTarget(target, event.x - dragOffsetX, event.y - dragOffsetY)
                 dragging = false
-                setStatus("Overview moved")
+                setStatus(context.getString(R.string.overview_moved))
                 removeCallbacks(hideRunnable)
                 val afterDragMs = (manualShowMs - 1000L).coerceAtLeast(2500L)
                 postDelayed(hideRunnable, afterDragMs)
