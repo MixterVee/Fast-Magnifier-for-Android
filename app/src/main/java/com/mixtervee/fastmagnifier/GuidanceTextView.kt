@@ -73,11 +73,6 @@ class GuidanceTextView @JvmOverloads constructor(
     private fun cleanStatus(raw: String): String {
         val frozen = rootView.findViewById<View>(R.id.frozenImage)?.visibility == View.VISIBLE
 
-        // Enhancement profiles are now chosen automatically; do not surface internal switches.
-        if (!frozen && raw.matches(Regex("(?i)(Text|Detail|Distance) mode"))) {
-            return context.getString(R.string.camera_ready)
-        }
-
         val instructionFragments = listOf(
             "slide up/down",
             "slide zoom",
@@ -127,8 +122,8 @@ class GuidanceTextView @JvmOverloads constructor(
         val readTextButton = rootView.findViewById<View>(R.id.readTextButton)
         val canUndo = undoButton?.visibility == View.VISIBLE && undoButton.isEnabled
         val canRead = readTextButton?.isEnabled == true
-        val maxReached = raw.contains("max reached", ignoreCase = true) ||
-            raw.contains("Maximum", ignoreCase = true)
+        val maxReached = raw.contains(context.getString(R.string.max_reached_keyword), ignoreCase = true) ||
+            raw.contains(context.getString(R.string.maximum_keyword), ignoreCase = true)
 
         val actions = mutableListOf<String>()
         actions += context.getString(R.string.guide_pinch_zoom)
