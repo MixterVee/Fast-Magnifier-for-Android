@@ -75,7 +75,7 @@ class GuidanceTextView @JvmOverloads constructor(
 
         // Enhancement profiles are now chosen automatically; do not surface internal switches.
         if (!frozen && raw.matches(Regex("(?i)(Text|Detail|Distance) mode"))) {
-            return "Camera ready"
+            return context.getString(R.string.camera_ready)
         }
 
         val instructionFragments = listOf(
@@ -111,7 +111,7 @@ class GuidanceTextView @JvmOverloads constructor(
             }
 
         if (meaningful.isNotEmpty()) return meaningful.joinToString(" • ")
-        return if (frozen) "Frozen image" else "Camera ready"
+        return if (frozen) context.getString(R.string.frozen_image_status) else context.getString(R.string.camera_ready)
     }
 
     private fun currentGuide(raw: String): String {
@@ -119,7 +119,7 @@ class GuidanceTextView @JvmOverloads constructor(
         val frozen = frozenImage?.visibility == View.VISIBLE
 
         if (!frozen) {
-            return "Pinch Zoom   •   Tap Focus   •   Hold Freeze"
+            return context.getString(R.string.guide_live)
         }
 
         val zoomed = (frozenImage?.scaleX ?: 1f) > 1.01f
@@ -131,23 +131,23 @@ class GuidanceTextView @JvmOverloads constructor(
             raw.contains("Maximum", ignoreCase = true)
 
         val actions = mutableListOf<String>()
-        actions += "Pinch Zoom"
+        actions += context.getString(R.string.guide_pinch_zoom)
 
         if (zoomed) {
-            actions += "Drag Move"
-            actions += "Tap Overview"
-            if (!maxReached) actions += "Double-tap Enhance"
-            if (canRead) actions += "Read Text (view)"
+            actions += context.getString(R.string.guide_drag_move)
+            actions += context.getString(R.string.guide_tap_overview)
+            if (!maxReached) actions += context.getString(R.string.guide_double_tap_enhance)
+            if (canRead) actions += context.getString(R.string.guide_read_text_view)
         } else {
-            actions += "Tap Full View"
+            actions += context.getString(R.string.guide_tap_full_view)
             if (canRead) {
-                actions += "Read Text (full image)"
+                actions += context.getString(R.string.guide_read_text_full)
             } else {
-                actions += "OCR after enhancement"
+                actions += context.getString(R.string.guide_ocr_after_enhancement)
             }
         }
 
-        if (canUndo) actions += "Undo"
+        if (canUndo) actions += context.getString(R.string.undo)
         return actions.joinToString("   •   ")
     }
 }

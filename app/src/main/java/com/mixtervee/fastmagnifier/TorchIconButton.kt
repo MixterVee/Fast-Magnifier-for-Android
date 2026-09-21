@@ -14,11 +14,13 @@ class TorchIconButton @JvmOverloads constructor(
 
     override fun setText(text: CharSequence?, type: TextView.BufferType?) {
         val state = text?.toString().orEmpty()
-        isSelected = state.contains("On", ignoreCase = true)
+        isSelected = state == context.getString(R.string.light_on) ||
+            state == context.getString(R.string.assist_on)
         contentDescription = when {
-            state.contains("No Light", ignoreCase = true) -> "Torch unavailable"
-            isSelected -> "Torch on"
-            else -> "Torch off"
+            state == context.getString(R.string.no_light) ||
+                state == context.getString(R.string.no_assist) -> context.getString(R.string.torch_unavailable)
+            isSelected -> context.getString(R.string.torch_on)
+            else -> context.getString(R.string.torch_off)
         }
         super.setText("", type)
     }

@@ -83,9 +83,9 @@ class RecentCapturesController(
         val files = recentFiles(activity)
         if (files.isEmpty()) {
             MaterialAlertDialogBuilder(activity)
-                .setTitle("Recent captures")
-                .setMessage("No recent captures yet. Frozen images will appear here automatically.")
-                .setPositiveButton("OK", null)
+                .setTitle(R.string.recent_captures)
+                .setMessage(R.string.no_recent_captures)
+                .setPositiveButton(R.string.ok, null)
                 .show()
             return
         }
@@ -94,18 +94,18 @@ class RecentCapturesController(
         val labels = files.map { formatter.format(Date(it.lastModified())) }.toTypedArray()
 
         MaterialAlertDialogBuilder(activity)
-            .setTitle("Recent captures")
+            .setTitle(R.string.recent_captures)
             .setItems(labels) { dialog, which ->
                 dialog.dismiss()
                 files.getOrNull(which)?.let { load(it) }
             }
-            .setNeutralButton("Clear all") { _, _ -> confirmClear() }
-            .setNegativeButton("Back", null)
+            .setNeutralButton(R.string.clear_all) { _, _ -> confirmClear() }
+            .setNegativeButton(R.string.back, null)
             .show()
     }
 
     private fun load(file: File) {
-        status("Opening recent capture…")
+        status(activity.getString(R.string.opening_recent_capture))
         io.execute {
             val bitmap = try {
                 BitmapFactory.decodeFile(file.absolutePath)
@@ -115,7 +115,7 @@ class RecentCapturesController(
 
             activity.runOnUiThread {
                 if (bitmap == null) {
-                    status("Could not open recent capture")
+                    status(activity.getString(R.string.could_not_open_recent_capture))
                 } else {
                     onSelected(bitmap)
                 }
@@ -125,17 +125,17 @@ class RecentCapturesController(
 
     private fun confirmClear() {
         MaterialAlertDialogBuilder(activity)
-            .setTitle("Clear recent captures?")
-            .setMessage("This clears only Fast Magnifier's recent-history copies. Pictures you saved normally are not affected.")
-            .setPositiveButton("Clear") { _, _ -> clearAll() }
-            .setNegativeButton("Cancel", null)
+            .setTitle(R.string.clear_recent_captures_question)
+            .setMessage(R.string.clear_recent_captures_message)
+            .setPositiveButton(R.string.clear) { _, _ -> clearAll() }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
     private fun clearAll() {
         io.execute {
             recentFiles(activity).forEach { it.delete() }
-            activity.runOnUiThread { status("Recent captures cleared") }
+            activity.runOnUiThread { status(activity.getString(R.string.recent_captures_cleared)) }
         }
     }
 }

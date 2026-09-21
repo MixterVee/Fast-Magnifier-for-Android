@@ -63,23 +63,23 @@ class CameraCodePresenter(
         }
 
         when {
-            code.isUrl -> actions.addView(actionButton("Open") {
+            code.isUrl -> actions.addView(actionButton(activity.getString(R.string.open)) {
                 openWeb(code.value)
                 dismiss()
             })
 
-            code.isProductBarcode -> actions.addView(actionButton("Search") {
+            code.isProductBarcode -> actions.addView(actionButton(activity.getString(R.string.search)) {
                 searchWeb(code.value)
                 dismiss()
             })
         }
 
-        actions.addView(actionButton("Copy") {
+        actions.addView(actionButton(activity.getString(R.string.copy)) {
             val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("Scanned code", code.value))
-            Toast.makeText(activity, "Code copied", Toast.LENGTH_SHORT).show()
+            clipboard.setPrimaryClip(ClipData.newPlainText(activity.getString(R.string.scanned_code), code.value))
+            Toast.makeText(activity, R.string.code_copied, Toast.LENGTH_SHORT).show()
         })
-        actions.addView(actionButton("Dismiss") { dismiss() })
+        actions.addView(actionButton(activity.getString(R.string.dismiss)) { dismiss() })
         content.addView(actions)
         panel.addView(content)
 
@@ -120,7 +120,7 @@ class CameraCodePresenter(
         runCatching {
             activity.startActivity(Intent(Intent.ACTION_VIEW, uri))
         }.onFailure {
-            Toast.makeText(activity, "No app can open this link", Toast.LENGTH_SHORT).show()
+            Toast.makeText(activity, R.string.no_app_open_link, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -129,7 +129,7 @@ class CameraCodePresenter(
         runCatching {
             activity.startActivity(Intent(Intent.ACTION_VIEW, uri))
         }.onFailure {
-            Toast.makeText(activity, "No browser available", Toast.LENGTH_SHORT).show()
+            Toast.makeText(activity, R.string.no_browser_available, Toast.LENGTH_SHORT).show()
         }
     }
 

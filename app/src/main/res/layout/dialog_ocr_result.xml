@@ -9,7 +9,7 @@
         android:id="@+id/ocrTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Recognized text"
+        android:text="@string/ocr_title"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
         android:textStyle="bold" />
 
@@ -17,7 +17,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:text="Check important numbers and serials against the image before using them."
+        android:text="@string/ocr_warning"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Body2" />
 
     <androidx.core.widget.NestedScrollView
@@ -49,7 +49,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:enabled="false"
-            android:text="Read Aloud" />
+            android:text="@string/read_aloud" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/ocrStopSpeechButton"
@@ -59,7 +59,7 @@
             android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:enabled="false"
-            android:text="Stop" />
+            android:text="@string/stop" />
     </LinearLayout>
 
     <LinearLayout
@@ -73,7 +73,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Copy" />
+            android:text="@string/copy" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/ocrSaveButton"
@@ -81,7 +81,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
-            android:text="Save Text" />
+            android:text="@string/save_text" />
     </LinearLayout>
 
     <LinearLayout
@@ -96,7 +96,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Share" />
+            android:text="@string/share" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/ocrCloseButton"
@@ -105,7 +105,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
-            android:text="Close" />
+            android:text="@string/close" />
     </LinearLayout>
 
 </LinearLayout>

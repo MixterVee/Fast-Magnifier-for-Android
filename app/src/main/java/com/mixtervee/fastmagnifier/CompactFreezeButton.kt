@@ -17,7 +17,7 @@ class CompactFreezeButton @JvmOverloads constructor(
 ) : MaterialButton(context, attrs, defStyleAttr) {
 
     override fun setText(text: CharSequence?, type: TextView.BufferType?) {
-        val compactText = if (text?.toString() == "Freeze + Enhance") "Freeze" else text
+        val compactText = if (text?.toString() == context.getString(R.string.freeze_enhance)) context.getString(R.string.freeze) else text
         super.setText(compactText, type)
     }
 }

@@ -29,17 +29,17 @@ class SettingsController(
 
     fun show() {
         val items = arrayOf(
-            "Screen Magnifier  •  magnify, tap links & copy text",
-            "Overview time  •  ${settings.overviewLabel}",
-            "Area enhance  •  ${settings.areaEnhanceLabel}",
-            "Read aloud speed  •  ${settings.speechRateLabel}",
-            "Keep screen awake  •  ${settings.keepScreenAwakeLabel}",
-            "Recent captures  •  ${recentCaptures.count()}",
-            "Restore defaults"
+            activity.getString(R.string.settings_screen_magnifier_item),
+            activity.getString(R.string.settings_overview_item, settings.overviewLabel),
+            activity.getString(R.string.settings_area_item, settings.areaEnhanceLabel),
+            activity.getString(R.string.settings_speech_item, settings.speechRateLabel),
+            activity.getString(R.string.settings_awake_item, settings.keepScreenAwakeLabel),
+            activity.getString(R.string.settings_recent_item, recentCaptures.count()),
+            activity.getString(R.string.restore_defaults)
         )
 
         MaterialAlertDialogBuilder(activity)
-            .setTitle("Settings")
+            .setTitle(R.string.settings)
             .setItems(items) { dialog, which ->
                 dialog.dismiss()
                 when (which) {
@@ -52,14 +52,14 @@ class SettingsController(
                     6 -> confirmReset()
                 }
             }
-            .setNegativeButton("Close", null)
+            .setNegativeButton(R.string.close, null)
             .show()
     }
 
     private fun showScreenMagnifier() {
         val service = ScreenMagnifierService.instance
         if (service != null) {
-            status("Starting Screen Magnifier…")
+            status(activity.getString(R.string.starting_screen_magnifier))
             activity.moveTaskToBack(true)
             Handler(Looper.getMainLooper()).postDelayed({
                 ScreenMagnifierService.instance?.startScreenMagnifier()
@@ -68,87 +68,84 @@ class SettingsController(
         }
 
         MaterialAlertDialogBuilder(activity)
-            .setTitle("Enable Screen Magnifier")
-            .setMessage(
-                "Android requires a one-time Accessibility permission so Fast Magnifier can magnify other apps and read text when you long-press inside the lens.\n\n" +
-                    "Tap Enable, choose Fast Magnifier Screen Magnifier, turn it on, then return here and tap Screen Magnifier again."
-            )
-            .setPositiveButton("Enable") { _, _ ->
+            .setTitle(R.string.enable_screen_magnifier)
+            .setMessage(R.string.accessibility_permission_settings)
+            .setPositiveButton(R.string.enable) { _, _ ->
                 activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
-            .setNegativeButton("Cancel") { _, _ -> show() }
+            .setNegativeButton(R.string.cancel) { _, _ -> show() }
             .show()
     }
 
     private fun showOverviewSettings() {
         MaterialAlertDialogBuilder(activity)
-            .setTitle("Overview display time")
+            .setTitle(R.string.overview_display_time)
             .setSingleChoiceItems(
-                AppSettings.OVERVIEW_LABELS,
+                settings.overviewLabels,
                 settings.overviewIndex
             ) { dialog, which ->
                 settings.overviewIndex = which
                 onOverviewChanged()
-                status("Overview time: ${settings.overviewLabel}")
+                status(activity.getString(R.string.overview_time_status, settings.overviewLabel))
                 dialog.dismiss()
             }
-            .setNegativeButton("Back") { _, _ -> show() }
+            .setNegativeButton(R.string.back) { _, _ -> show() }
             .show()
     }
 
     private fun showAreaEnhanceSettings() {
         val choices = arrayOf(
-            "Gentle  •  subtle extra sharpening",
-            "Normal  •  balanced (recommended)",
-            "Strong  •  maximum extra sharpening"
+            activity.getString(R.string.area_gentle_detail),
+            activity.getString(R.string.area_normal_detail),
+            activity.getString(R.string.area_strong_detail)
         )
 
         MaterialAlertDialogBuilder(activity)
-            .setTitle("Area enhancement strength")
+            .setTitle(R.string.area_enhancement_strength)
             .setSingleChoiceItems(
                 choices,
                 settings.areaEnhanceIndex
             ) { dialog, which ->
                 settings.areaEnhanceIndex = which
-                status("Area enhance: ${settings.areaEnhanceLabel}")
+                status(activity.getString(R.string.area_enhance_status, settings.areaEnhanceLabel))
                 dialog.dismiss()
             }
-            .setNegativeButton("Back") { _, _ -> show() }
+            .setNegativeButton(R.string.back) { _, _ -> show() }
             .show()
     }
 
     private fun showSpeechRateSettings() {
         MaterialAlertDialogBuilder(activity)
-            .setTitle("Read aloud speed")
+            .setTitle(R.string.read_aloud_speed)
             .setSingleChoiceItems(
-                AppSettings.SPEECH_RATE_LABELS,
+                settings.speechRateLabels,
                 settings.speechRateIndex
             ) { dialog, which ->
                 settings.speechRateIndex = which
                 onSpeechRateChanged()
-                status("Read aloud speed: ${settings.speechRateLabel}")
+                status(activity.getString(R.string.read_aloud_speed_status, settings.speechRateLabel))
                 dialog.dismiss()
             }
-            .setNegativeButton("Back") { _, _ -> show() }
+            .setNegativeButton(R.string.back) { _, _ -> show() }
             .show()
     }
 
     private fun showKeepScreenAwakeSettings() {
         val choices = arrayOf(
-            "Off  •  use the normal Android screen timeout",
-            "On  •  keep the display awake while Fast Magnifier is open"
+            activity.getString(R.string.awake_off_detail),
+            activity.getString(R.string.awake_on_detail)
         )
         val selected = if (settings.keepScreenAwake) 1 else 0
 
         MaterialAlertDialogBuilder(activity)
-            .setTitle("Keep screen awake")
+            .setTitle(R.string.keep_screen_awake)
             .setSingleChoiceItems(choices, selected) { dialog, which ->
                 settings.keepScreenAwake = which == 1
                 applyKeepScreenAwake()
-                status("Keep screen awake: ${settings.keepScreenAwakeLabel}")
+                status(activity.getString(R.string.keep_screen_awake_status, settings.keepScreenAwakeLabel))
                 dialog.dismiss()
             }
-            .setNegativeButton("Back") { _, _ -> show() }
+            .setNegativeButton(R.string.back) { _, _ -> show() }
             .show()
     }
 
@@ -167,28 +164,28 @@ class SettingsController(
             adjustViewBounds = true
             scaleType = ImageView.ScaleType.FIT_CENTER
             setPadding(padding, padding, padding, padding)
-            contentDescription = "Recent magnifier capture"
+            contentDescription = activity.getString(R.string.recent_capture_description)
         }
 
         MaterialAlertDialogBuilder(activity)
-            .setTitle("Recent capture")
+            .setTitle(R.string.recent_capture)
             .setView(image)
-            .setPositiveButton("Close", null)
+            .setPositiveButton(R.string.close, null)
             .show()
     }
 
     private fun confirmReset() {
         MaterialAlertDialogBuilder(activity)
-            .setTitle("Restore defaults?")
-            .setMessage("Overview time, area enhancement strength, read aloud speed, and keep-screen-awake will return to their original settings.")
-            .setPositiveButton("Restore") { _, _ ->
+            .setTitle(R.string.restore_defaults_question)
+            .setMessage(R.string.restore_defaults_message)
+            .setPositiveButton(R.string.restore) { _, _ ->
                 settings.resetDefaults()
                 onOverviewChanged()
                 onSpeechRateChanged()
                 applyKeepScreenAwake()
-                status("Settings restored to defaults")
+                status(activity.getString(R.string.settings_restored))
             }
-            .setNegativeButton("Cancel") { _, _ -> show() }
+            .setNegativeButton(R.string.cancel) { _, _ -> show() }
             .show()
     }
 }

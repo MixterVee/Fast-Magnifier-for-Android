@@ -165,7 +165,7 @@ class ScreenMagnifierService : AccessibilityService() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             Toast.makeText(
                 this,
-                "The custom screen lens requires Android 14 or newer.",
+                getString(R.string.screen_requires_android_14),
                 Toast.LENGTH_LONG
             ).show()
             return false
@@ -183,7 +183,7 @@ class ScreenMagnifierService : AccessibilityService() {
         startRefreshing()
         Toast.makeText(
             this,
-            "Tap to activate • drag to move • pinch or drag corners to resize • long-press text to copy",
+            getString(R.string.screen_usage_hint),
             Toast.LENGTH_LONG
         ).show()
         return true
@@ -247,7 +247,7 @@ class ScreenMagnifierService : AccessibilityService() {
                 runCatching { windowManager.addView(lens, params) }
             }
             startRefreshing()
-            Toast.makeText(this, "Could not minimize magnifier", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.could_not_minimize, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -265,7 +265,7 @@ class ScreenMagnifierService : AccessibilityService() {
             textSize = 25f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            contentDescription = "Restore screen magnifier"
+            contentDescription = getString(R.string.restore_screen_magnifier)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 setColor(Color.argb(242, 15, 18, 24))
@@ -612,7 +612,7 @@ class ScreenMagnifierService : AccessibilityService() {
         val image = ImageView(this).apply {
             scaleType = ImageView.ScaleType.MATRIX
             setBackgroundColor(Color.BLACK)
-            contentDescription = "Screen magnifier lens. Tap to activate. Drag to move. Pinch or drag a cyan corner to resize. Long-press text to copy."
+            contentDescription = getString(R.string.screen_lens_description)
             setOnTouchListener { _, event -> handleLensTouch(event) }
         }
         imageFrame.addView(
@@ -627,7 +627,7 @@ class ScreenMagnifierService : AccessibilityService() {
             val handle = FrameLayout(this).apply {
                 // Invisible 46dp hit target. The visual indicator is drawn into
                 // the border, so nothing covers the magnified content.
-                contentDescription = "Resize magnifier"
+                contentDescription = getString(R.string.resize_magnifier)
                 setOnTouchListener { _, event -> handleCornerResize(event, corner) }
             }
             imageFrame.addView(
@@ -691,9 +691,9 @@ class ScreenMagnifierService : AccessibilityService() {
         )
 
         addEqualControl("+", 18f) { changeScale(SCALE_STEP) }
-        addEqualControl("Min") { minimizeScreenMagnifier() }
-        addEqualControl("Back") { returnToMainMenu() }
-        addEqualControl("Exit") { exitApplication() }
+        addEqualControl(getString(R.string.minimize_short)) { minimizeScreenMagnifier() }
+        addEqualControl(getString(R.string.back)) { returnToMainMenu() }
+        addEqualControl(getString(R.string.exit)) { exitApplication() }
         container.addView(
             controls,
             LinearLayout.LayoutParams(
@@ -725,7 +725,7 @@ class ScreenMagnifierService : AccessibilityService() {
         } catch (t: Throwable) {
             Toast.makeText(
                 this,
-                "Lens overlay failed: ${t.javaClass.simpleName}",
+                getString(R.string.lens_overlay_failed, t.javaClass.simpleName),
                 Toast.LENGTH_LONG
             ).show()
             false
@@ -1319,7 +1319,7 @@ class ScreenMagnifierService : AccessibilityService() {
         }
 
         if (code.isUrl) {
-            actions.addView(controlButton("Open") {
+            actions.addView(controlButton(getString(R.string.open)) {
                 val uri = runCatching { android.net.Uri.parse(code.value) }.getOrNull()
                 if (uri != null && uri.scheme?.lowercase() in setOf("http", "https")) {
                     runCatching {
@@ -1327,14 +1327,14 @@ class ScreenMagnifierService : AccessibilityService() {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         })
                     }.onFailure {
-                        Toast.makeText(this, "No app can open this link", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, R.string.no_app_open_link, Toast.LENGTH_SHORT).show()
                     }
                 }
                 barcodePopupView?.let { removeOverlay(it) }
                 barcodePopupView = null
             })
         } else if (code.isProductBarcode) {
-            actions.addView(controlButton("Search") {
+            actions.addView(controlButton(getString(R.string.search)) {
                 val uri = android.net.Uri.parse(
                     "https://www.google.com/search?q=${android.net.Uri.encode(code.value)}"
                 )
@@ -1343,19 +1343,19 @@ class ScreenMagnifierService : AccessibilityService() {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     })
                 }.onFailure {
-                    Toast.makeText(this, "No browser available", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, R.string.no_browser_available, Toast.LENGTH_SHORT).show()
                 }
                 barcodePopupView?.let { removeOverlay(it) }
                 barcodePopupView = null
             })
         }
 
-        actions.addView(controlButton("Copy") {
+        actions.addView(controlButton(getString(R.string.copy)) {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("Scanned code", code.value))
-            Toast.makeText(this, "Code copied", Toast.LENGTH_SHORT).show()
+            clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.scanned_code), code.value))
+            Toast.makeText(this, R.string.code_copied, Toast.LENGTH_SHORT).show()
         })
-        actions.addView(controlButton("Dismiss") {
+        actions.addView(controlButton(getString(R.string.dismiss)) {
             barcodePopupView?.let { removeOverlay(it) }
             barcodePopupView = null
         })
@@ -1388,7 +1388,7 @@ class ScreenMagnifierService : AccessibilityService() {
             windowManager.addView(panel, params)
             barcodePopupView = panel
         } catch (_: Throwable) {
-            Toast.makeText(this, "Code detected: ${code.value}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.code_detected_value, code.value), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -1397,7 +1397,7 @@ class ScreenMagnifierService : AccessibilityService() {
 
         val source = extractLensSourceBitmap()
         if (source == null) {
-            Toast.makeText(this, "Wait for the lens image to appear", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.wait_lens_image, Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -1497,7 +1497,7 @@ class ScreenMagnifierService : AccessibilityService() {
         if (text.isNotEmpty()) {
             showCopyPopup(text, localX, localY)
         } else {
-            Toast.makeText(this, "No text found at that point", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.no_text_at_point, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1582,14 +1582,14 @@ class ScreenMagnifierService : AccessibilityService() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END
         }
-        actions.addView(controlButton("Copy") {
+        actions.addView(controlButton(getString(R.string.copy)) {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("Screen text", text))
-            Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
+            clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.screen_text), text))
+            Toast.makeText(this, R.string.copied, Toast.LENGTH_SHORT).show()
             copyPopupView?.let { removeOverlay(it) }
             copyPopupView = null
         })
-        actions.addView(controlButton("Cancel") {
+        actions.addView(controlButton(getString(R.string.cancel)) {
             copyPopupView?.let { removeOverlay(it) }
             copyPopupView = null
         })
@@ -1625,7 +1625,7 @@ class ScreenMagnifierService : AccessibilityService() {
             windowManager.addView(panel, params)
             copyPopupView = panel
         } catch (_: Throwable) {
-            Toast.makeText(this, "Could not show Copy", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.could_not_show_copy, Toast.LENGTH_SHORT).show()
         }
     }
 

@@ -469,7 +469,7 @@ class MainActivity : AppCompatActivity() {
                     binding.frozenImage.setImageBitmap(out)
                     binding.frozenImage.clampPan()
                     binding.toggleButton.isEnabled = true
-                    binding.toggleButton.text = "Original"
+                    binding.toggleButton.text = getString(R.string.original)
                     binding.undoButton.isEnabled = true
                     binding.readTextButton.isEnabled = !ocrInProgress
                     binding.saveButton.isEnabled = true
@@ -531,7 +531,7 @@ class MainActivity : AppCompatActivity() {
         binding.frozenImage.setImageBitmap(out)
         binding.frozenImage.clampPan()
         binding.toggleButton.isEnabled = true
-        binding.toggleButton.text = "Original"
+        binding.toggleButton.text = getString(R.string.original)
         binding.undoButton.isEnabled = areaUndoHistory.isNotEmpty()
         binding.readTextButton.isEnabled = !ocrInProgress
         binding.saveButton.isEnabled = true
@@ -610,9 +610,9 @@ class MainActivity : AppCompatActivity() {
                 setupCameraControls()
                 updateSelfieScreenBrightness()
                 binding.statusText.text = if (isFrontCamera()) {
-                    "Selfie camera ready"
+                    getString(R.string.selfie_camera_ready)
                 } else {
-                    "Camera ready"
+                    getString(R.string.camera_ready)
                 }
             } catch (_: Throwable) {
                 restoreSystemScreenBrightness()
@@ -662,11 +662,9 @@ class MainActivity : AppCompatActivity() {
         val frozen = binding.frozenImage.visibility == View.VISIBLE
 
         binding.cameraFlipButton.isEnabled = cameraFlipAvailable && !frozen
-        binding.cameraFlipButton.contentDescription = if (isFrontCamera()) {
-            "Switch to rear camera"
-        } else {
-            "Switch to selfie camera"
-        }
+        binding.cameraFlipButton.contentDescription = getString(
+            if (isFrontCamera()) R.string.switch_to_rear_camera else R.string.switch_to_selfie_camera
+        )
 
         val hasLight = c.cameraInfo.hasFlashUnit()
         if (isFrontCamera()) {
@@ -674,23 +672,23 @@ class MainActivity : AppCompatActivity() {
             val assistAvailable = selfieAssistCameraId != null
             binding.lightButton.isEnabled = assistAvailable && !frozen
             binding.lightButton.contentDescription = if (torchEnabled) {
-                "Turn off selfie light assist"
+                getString(R.string.turn_off_selfie_assist)
             } else {
-                "Turn on selfie light assist"
+                getString(R.string.turn_on_selfie_assist)
             }
             binding.lightButton.text = when {
-                !assistAvailable -> "No Assist"
-                torchEnabled -> "Assist On"
-                else -> "Assist"
+                !assistAvailable -> getString(R.string.no_assist)
+                torchEnabled -> getString(R.string.assist_on)
+                else -> getString(R.string.assist)
             }
         } else {
             selfieAssistCameraId = null
             binding.lightButton.isEnabled = hasLight && !frozen
-            binding.lightButton.contentDescription = if (torchEnabled) "Turn off light" else "Turn on light"
+            binding.lightButton.contentDescription = getString(if (torchEnabled) R.string.turn_off_light else R.string.turn_on_light)
             binding.lightButton.text = when {
-                !hasLight -> "No Light"
-                torchEnabled -> "Light On"
-                else -> "Light"
+                !hasLight -> getString(R.string.no_light)
+                torchEnabled -> getString(R.string.light_on)
+                else -> getString(R.string.light)
             }
             if (hasLight && torchEnabled) {
                 c.cameraControl.enableTorch(true)
@@ -710,7 +708,7 @@ class MainActivity : AppCompatActivity() {
             updateExposureLabel(current)
         } else {
             binding.exposureSlider.isEnabled = false
-            binding.exposureText.text = "EV Auto"
+            binding.exposureText.text = getString(R.string.ev_auto)
         }
     }
 
@@ -736,7 +734,7 @@ class MainActivity : AppCompatActivity() {
         val c = camera ?: return
         if (!c.cameraInfo.hasFlashUnit()) {
             binding.lightButton.isEnabled = false
-            binding.lightButton.text = "No Light"
+            binding.lightButton.text = getString(R.string.no_light)
             updateSelfieFillLight()
             return
         }
@@ -748,7 +746,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 future.get()
                 torchEnabled = target
-                binding.lightButton.text = if (torchEnabled) "Light On" else "Light"
+                binding.lightButton.text = getString(if (torchEnabled) R.string.light_on else R.string.light)
                 binding.statusText.text = if (torchEnabled) "Light on" else "Light off"
             } catch (_: Throwable) {
                 binding.statusText.text = "Could not change camera light"
@@ -780,11 +778,11 @@ class MainActivity : AppCompatActivity() {
             val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
             manager.setTorchMode(id, enabled)
             torchEnabled = enabled
-            binding.lightButton.text = if (enabled) "Assist On" else "Assist"
+            binding.lightButton.text = getString(if (enabled) R.string.assist_on else R.string.assist)
             binding.lightButton.contentDescription = if (enabled) {
-                "Turn off selfie light assist"
+                getString(R.string.turn_off_selfie_assist)
             } else {
-                "Turn on selfie light assist"
+                getString(R.string.turn_on_selfie_assist)
             }
             if (!quiet) {
                 binding.statusText.text = if (enabled) {
@@ -795,7 +793,7 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (_: Throwable) {
             torchEnabled = false
-            binding.lightButton.text = "Assist"
+            binding.lightButton.text = getString(R.string.assist)
             if (!quiet) {
                 binding.statusText.text = "This phone cannot use the rear LED with the selfie camera"
             }
@@ -958,7 +956,7 @@ class MainActivity : AppCompatActivity() {
                         "Focus adjusted"
                     }
                 } catch (_: Throwable) {
-                    binding.statusText.text = if (isFrontCamera()) "Selfie camera ready" else "Camera ready"
+                    binding.statusText.text = if (isFrontCamera()) getString(R.string.selfie_camera_ready) else getString(R.string.camera_ready)
                 }
             }
 
@@ -1036,9 +1034,9 @@ class MainActivity : AppCompatActivity() {
         binding.selfieLightFrame.visibility = View.GONE
         binding.focusRing.visibility = View.GONE
         binding.cameraFlipButton.isEnabled = false
-        binding.freezeButton.text = "Resume"
+        binding.freezeButton.text = getString(R.string.resume)
         binding.toggleButton.isEnabled = false
-        binding.toggleButton.text = "Original"
+        binding.toggleButton.text = getString(R.string.original)
         binding.frozenToolsBar.visibility = View.VISIBLE
         binding.undoButton.visibility = View.VISIBLE
         binding.undoButton.isEnabled = false
@@ -1097,7 +1095,7 @@ class MainActivity : AppCompatActivity() {
                             )
                             binding.frozenImage.clampPan()
                             binding.toggleButton.isEnabled = true
-                            binding.toggleButton.text = if (showingEnhanced) "Original" else "Enhanced"
+                            binding.toggleButton.text = getString(if (showingEnhanced) R.string.original else R.string.enhanced)
                             binding.readTextButton.isEnabled = !ocrInProgress
                             binding.saveButton.isEnabled = true
                             if (!ocrInProgress) {
@@ -1129,9 +1127,9 @@ class MainActivity : AppCompatActivity() {
         binding.frozenImage.visibility = View.GONE
         binding.previewView.visibility = View.VISIBLE
         binding.focusRing.visibility = View.GONE
-        binding.freezeButton.text = "Freeze + Enhance"
+        binding.freezeButton.text = getString(R.string.freeze_enhance)
         binding.toggleButton.isEnabled = false
-        binding.toggleButton.text = "Original"
+        binding.toggleButton.text = getString(R.string.original)
         binding.frozenToolsBar.visibility = View.GONE
         binding.undoButton.visibility = View.GONE
         binding.undoButton.isEnabled = false
@@ -1139,7 +1137,7 @@ class MainActivity : AppCompatActivity() {
         binding.saveButton.isEnabled = false
         setupCameraControls()
         updateSelfieScreenBrightness()
-        binding.statusText.text = if (isFrontCamera()) "Selfie camera ready" else "Camera ready"
+        binding.statusText.text = if (isFrontCamera()) getString(R.string.selfie_camera_ready) else getString(R.string.camera_ready)
     }
 
     private fun enhanceFrozen() {
@@ -1164,7 +1162,7 @@ class MainActivity : AppCompatActivity() {
                     binding.frozenImage.setImageBitmap(out)
                     binding.frozenImage.clampPan()
                     binding.toggleButton.isEnabled = true
-                    binding.toggleButton.text = "Original"
+                    binding.toggleButton.text = getString(R.string.original)
                     binding.readTextButton.isEnabled = !ocrInProgress
                     binding.saveButton.isEnabled = true
                     binding.statusText.text = "Enhanced in ${ms} ms"
@@ -1189,7 +1187,7 @@ class MainActivity : AppCompatActivity() {
         showingEnhanced = !showingEnhanced
         binding.frozenImage.setImageBitmap(if (showingEnhanced) e else original)
         binding.frozenImage.clampPan()
-        binding.toggleButton.text = if (showingEnhanced) "Original" else "Enhanced"
+        binding.toggleButton.text = getString(if (showingEnhanced) R.string.original else R.string.enhanced)
         binding.statusText.text = if (showingEnhanced) "Enhanced" else "Original"
     }
 

@@ -106,7 +106,7 @@ class OcrController(
 
         speakButton = view.findViewById<MaterialButton>(R.id.ocrSpeakButton).apply {
             isEnabled = ttsReady
-            this.text = "Read Aloud"
+            this.text = activity.getString(R.string.read_aloud)
             setOnClickListener {
                 when {
                     speechStopped -> startSpeech(recognizedText)
@@ -189,7 +189,7 @@ class OcrController(
         speechIndex = 0
         speechPaused = false
         speechStopped = false
-        speakButton?.text = "Pause"
+        speakButton?.text = activity.getString(R.string.pause)
         stopSpeechButton?.isEnabled = true
         status("Reading recognized text aloud")
         speakCurrentChunk()
@@ -199,7 +199,7 @@ class OcrController(
         if (speechStopped || speechPaused) return
         textToSpeech?.stop()
         speechPaused = true
-        speakButton?.text = "Resume"
+        speakButton?.text = activity.getString(R.string.resume_reading)
         stopSpeechButton?.isEnabled = true
         status("Reading paused")
     }
@@ -207,7 +207,7 @@ class OcrController(
     private fun resumeSpeech() {
         if (speechStopped || !speechPaused) return
         speechPaused = false
-        speakButton?.text = "Pause"
+        speakButton?.text = activity.getString(R.string.pause)
         stopSpeechButton?.isEnabled = true
         status("Reading recognized text aloud")
         speakCurrentChunk()
@@ -220,7 +220,7 @@ class OcrController(
         speechIndex = 0
         speechPaused = false
         speechStopped = true
-        speakButton?.text = "Read Aloud"
+        speakButton?.text = activity.getString(R.string.read_aloud)
         speakButton?.isEnabled = ttsReady
         stopSpeechButton?.isEnabled = false
         if (updateStatus) status("Reading stopped")
@@ -231,7 +231,7 @@ class OcrController(
         speechIndex = 0
         speechPaused = false
         speechStopped = true
-        speakButton?.text = "Read Aloud"
+        speakButton?.text = activity.getString(R.string.read_aloud)
         speakButton?.isEnabled = ttsReady
         stopSpeechButton?.isEnabled = false
         status("Finished reading recognized text")
@@ -281,7 +281,7 @@ class OcrController(
 
     private fun copyText(text: String) {
         val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("Recognized text", text))
+        clipboard.setPrimaryClip(ClipData.newPlainText(activity.getString(R.string.ocr_title), text))
         status("Recognized text copied")
     }
 
@@ -291,7 +291,7 @@ class OcrController(
             putExtra(Intent.EXTRA_SUBJECT, "Fast Magnifier recognized text")
             putExtra(Intent.EXTRA_TEXT, text)
         }
-        activity.startActivity(Intent.createChooser(intent, "Share recognized text"))
+        activity.startActivity(Intent.createChooser(intent, activity.getString(R.string.share)))
     }
 
     private fun saveText(text: String) {

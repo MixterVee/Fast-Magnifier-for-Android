@@ -4,14 +4,13 @@ import android.content.Context
 
 class AppSettings(context: Context) {
 
+    private val appContext = context.applicationContext
+
     companion object {
         val OVERVIEW_DURATIONS_MS = longArrayOf(3500L, 4500L, 6000L)
         val AREA_ENHANCE_BOOSTS = floatArrayOf(1.25f, 1.45f, 1.65f)
         val SPEECH_RATES = floatArrayOf(0.75f, 1.0f, 1.25f, 1.5f)
 
-        val OVERVIEW_LABELS = arrayOf("3.5 sec", "4.5 sec", "6 sec")
-        val AREA_ENHANCE_LABELS = arrayOf("Gentle", "Normal", "Strong")
-        val SPEECH_RATE_LABELS = arrayOf("0.75×  Slow", "1.0×  Normal", "1.25×  Faster", "1.5×  Fast")
 
         const val DEFAULT_OVERVIEW_INDEX = 1
         const val DEFAULT_AREA_ENHANCE_INDEX = 1
@@ -63,17 +62,39 @@ class AppSettings(context: Context) {
     val speechRate: Float
         get() = SPEECH_RATES[speechRateIndex]
 
+    val overviewLabels: Array<String>
+        get() = arrayOf(
+            appContext.getString(R.string.overview_3_5),
+            appContext.getString(R.string.overview_4_5),
+            appContext.getString(R.string.overview_6)
+        )
+
+    val areaEnhanceLabels: Array<String>
+        get() = arrayOf(
+            appContext.getString(R.string.area_gentle),
+            appContext.getString(R.string.area_normal),
+            appContext.getString(R.string.area_strong)
+        )
+
+    val speechRateLabels: Array<String>
+        get() = arrayOf(
+            appContext.getString(R.string.speech_slow),
+            appContext.getString(R.string.speech_normal),
+            appContext.getString(R.string.speech_faster),
+            appContext.getString(R.string.speech_fast)
+        )
+
     val overviewLabel: String
-        get() = OVERVIEW_LABELS[overviewIndex]
+        get() = overviewLabels[overviewIndex]
 
     val areaEnhanceLabel: String
-        get() = AREA_ENHANCE_LABELS[areaEnhanceIndex]
+        get() = areaEnhanceLabels[areaEnhanceIndex]
 
     val speechRateLabel: String
-        get() = SPEECH_RATE_LABELS[speechRateIndex]
+        get() = speechRateLabels[speechRateIndex]
 
     val keepScreenAwakeLabel: String
-        get() = if (keepScreenAwake) "On" else "Off"
+        get() = appContext.getString(if (keepScreenAwake) R.string.on else R.string.off)
 
     fun resetDefaults() {
         prefs.edit()

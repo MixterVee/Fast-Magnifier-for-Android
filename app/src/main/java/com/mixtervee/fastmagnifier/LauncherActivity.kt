@@ -86,15 +86,15 @@ class LauncherActivity : AppCompatActivity() {
         chooserShowing = true
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("Fast Magnifier")
-            .setMessage("What would you like to magnify?")
-            .setPositiveButton("Camera Magnifier") { _, _ ->
+            .setTitle(R.string.app_name)
+            .setMessage(R.string.chooser_message)
+            .setPositiveButton(R.string.camera_magnifier) { _, _ ->
                 chooserShowing = false
                 waitingForAccessibility = false
                 startActivity(Intent(this, MainActivity::class.java))
                 finish()
             }
-            .setNegativeButton("Screen Magnifier") { _, _ ->
+            .setNegativeButton(R.string.screen_magnifier) { _, _ ->
                 chooserShowing = false
                 chooseScreenMagnifier()
             }
@@ -114,16 +114,13 @@ class LauncherActivity : AppCompatActivity() {
         }
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("Enable Screen Magnifier")
-            .setMessage(
-                "Android requires a one-time Accessibility permission so Fast Magnifier can magnify other apps and read screen text when you long-press inside the lens.\n\n" +
-                    "Tap Enable, choose Fast Magnifier Screen Magnifier, turn it on, then press Back. Screen Magnifier should start automatically."
-            )
-            .setPositiveButton("Enable") { _, _ ->
+            .setTitle(R.string.enable_screen_magnifier)
+            .setMessage(R.string.accessibility_permission_launcher)
+            .setPositiveButton(R.string.enable) { _, _ ->
                 waitingForAccessibility = true
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
-            .setNegativeButton("Back") { _, _ ->
+            .setNegativeButton(R.string.back) { _, _ ->
                 waitingForAccessibility = false
                 showModeChooser()
             }
@@ -146,10 +143,10 @@ class LauncherActivity : AppCompatActivity() {
         } else {
             waitingForAccessibility = false
             MaterialAlertDialogBuilder(this)
-                .setTitle("Screen Magnifier not enabled")
-                .setMessage("Fast Magnifier could not connect to its Accessibility service. Make sure Fast Magnifier Screen Magnifier is turned on, then try again.")
-                .setPositiveButton("Try Again") { _, _ -> showModeChooser() }
-                .setNegativeButton("Accessibility Settings") { _, _ ->
+                .setTitle(R.string.screen_magnifier_not_enabled)
+                .setMessage(R.string.screen_magnifier_not_enabled_message)
+                .setPositiveButton(R.string.try_again) { _, _ -> showModeChooser() }
+                .setNegativeButton(R.string.accessibility_settings) { _, _ ->
                     waitingForAccessibility = true
                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 }
