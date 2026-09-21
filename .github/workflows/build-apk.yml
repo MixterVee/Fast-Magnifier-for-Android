@@ -68,6 +68,15 @@ jobs:
       - name: Make Camera barcode detection frozen-frame only
         run: python3 tools/apply_camera_frozen_only_barcode_fix.py
 
+      - name: Snapshot fully patched source
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fast-Magnifier-patched-source
+          path: |
+            app/src/main
+            app/build.gradle.kts
+          if-no-files-found: error
+
       - name: Audit UI guidance
         run: python3 tools/audit_ui_guidance.py
 
