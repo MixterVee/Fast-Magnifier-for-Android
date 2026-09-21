@@ -2,16 +2,21 @@ package com.mixtervee.fastmagnifier
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.provider.Settings
 import android.view.GestureDetector
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.ViewConfiguration
 import androidx.activity.result.contract.ActivityResultContracts
@@ -48,10 +53,16 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var frozenTapDetector: GestureDetector
+    private lateinit var liveScaleDetector: ScaleGestureDetector
+    private lateinit var frozenScaleDetector: ScaleGestureDetector
     private lateinit var ocrController: OcrController
     private lateinit var highResCaptureController: HighResCaptureController
     private lateinit var appSettings: AppSettings
     private lateinit var settingsController: SettingsController
+    private lateinit var barcodeScanner: BarcodeScannerController
+    private lateinit var barcodePresenter: CameraCodePresenter
+    private var lastDetectedBarcodeValue = ""
+    private var lastDetectedBarcodeAt = 0L
     private var camera: Camera? = null
     private var original: Bitmap? = null
     private var enhanced: Bitmap? = null
@@ -69,10 +80,17 @@ class MainActivity : AppCompatActivity() {
     private var enhanceRequestId = 0
     private var freezeSessionId = 0
 
-    private var frozenTouchDownY = 0f
-    private var frozenStartScale = 1f
     private var frozenScale = 1f
     private var frozenZoomGesture = false
+    private var frozenPanGesture = false
+    private var frozenLastTouchX = 0f
+    private var frozenLastTouchY = 0f
+    private var livePinchStartSpan = 0f
+    private var livePinchStartZoom = 1f
+    private var frozenPinchStartSpan = 0f
+    private var frozenPinchStartScale = 1f
+    private var frozenMultiTouchSequence = false
+    private var frozenNeedsPanRebase = false
 
     private val areaUndoHistory = mutableListOf<AreaUndoStep>()
     private var areaEnhancePasses = 0
@@ -80,6 +98,7 @@ class MainActivity : AppCompatActivity() {
     private var ocrInProgress = false
 
     private var torchEnabled = false
+    private var selfieAssistCameraId: String? = null
     private var cameraFacing = CameraSelector.LENS_FACING_BACK
     private var cameraFlipAvailable = false
 
@@ -119,8 +138,12 @@ class MainActivity : AppCompatActivity() {
             }
         )
         binding.navigatorView.setManualShowDuration(appSettings.overviewDurationMs)
+        barcodeScanner = BarcodeScannerController()
+        barcodePresenter = CameraCodePresenter(this, binding.root, R.id.statusText)
 
         setupFrozenTapDetector()
+        setupLiveScaleDetector()
+        setupFrozenScaleDetector()
         setupFrozenImageGestures()
 
         binding.textMode.setOnClickListener { selectMode(Mode.TEXT) }
@@ -148,6 +171,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun scanFrozenBarcode(bitmap: Bitmap?) {
+        val source = bitmap ?: return
+        if (!::barcodeScanner.isInitialized || source.isRecycled) return
+        barcodeScanner.scan(source) { code ->
+            if (code != null) runOnUiThread { presentDetectedCode(code) }
+        }
+    }
+
+    private fun presentDetectedCode(code: BarcodeScannerController.DetectedCode) {
+        if (!::barcodePresenter.isInitialized || isFinishing || isDestroyed) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (code.value == lastDetectedBarcodeValue && now - lastDetectedBarcodeAt < 8000L) return
+        lastDetectedBarcodeValue = code.value
+        lastDetectedBarcodeAt = now
+        barcodePresenter.show(code)
+    }
+
     private fun setupFrozenTapDetector() {
         frozenTapDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent): Boolean = true
@@ -167,42 +207,178 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    private fun physicalPointerSpan(event: MotionEvent, coordinateScale: Float = 1f): Float {
+        if (event.pointerCount < 2) return 0f
+        val dx = (event.getX(1) - event.getX(0)) * coordinateScale
+        val dy = (event.getY(1) - event.getY(0)) * coordinateScale
+        return hypot(dx.toDouble(), dy.toDouble()).toFloat()
+    }
+
+    private fun responsivePinchRatio(currentSpan: Float, startSpan: Float): Float {
+        if (currentSpan <= 0f || startSpan <= 0f) return 1f
+        val rawRatio = (currentSpan / startSpan).coerceIn(0.12f, 8f)
+        // A modest sensitivity boost: enough to feel immediate without becoming jumpy.
+        return Math.pow(rawRatio.toDouble(), 1.35).toFloat()
+    }
+
+    private fun setupLiveScaleDetector() {
+        liveScaleDetector = ScaleGestureDetector(
+            this,
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                    zoomGesture = true
+                    mainHandler.removeCallbacks(longPressRunnable)
+                    return camera != null && binding.frozenImage.visibility != View.VISIBLE
+                }
+
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    val c = camera ?: return false
+                    val state = c.cameraInfo.zoomState.value ?: return false
+                    val current = state.zoomRatio
+                    val target = (current * detector.scaleFactor)
+                        .coerceIn(state.minZoomRatio, state.maxZoomRatio)
+                    c.cameraControl.setZoomRatio(target)
+                    binding.statusText.text = "Zoom ${formatZoom(target)}×"
+                    return true
+                }
+
+                override fun onScaleEnd(detector: ScaleGestureDetector) {
+                    val ratio = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: return
+                    binding.statusText.text = "Zoom ${formatZoom(ratio)}×"
+                }
+            }
+        )
+    }
+
+    private fun setupFrozenScaleDetector() {
+        frozenScaleDetector = ScaleGestureDetector(
+            this,
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                    frozenZoomGesture = true
+                    frozenPanGesture = false
+                    return binding.frozenImage.visibility == View.VISIBLE
+                }
+
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    val previous = frozenScale
+                    frozenScale = (frozenScale * detector.scaleFactor).coerceIn(1f, 8f)
+                    if (kotlin.math.abs(frozenScale - previous) > 0.0005f) {
+                        applyFrozenScale()
+                        binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}×"
+                    }
+                    return true
+                }
+
+                override fun onScaleEnd(detector: ScaleGestureDetector) {
+                    binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}×"
+                    frozenZoomGesture = false
+                }
+            }
+        )
+    }
+
     private fun setupFrozenImageGestures() {
         binding.frozenImage.setOnTouchListener { _, event ->
-            frozenTapDetector.onTouchEvent(event)
-
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    frozenTouchDownY = event.y
-                    frozenStartScale = frozenScale
+                    frozenMultiTouchSequence = false
+                    frozenNeedsPanRebase = false
+                    frozenLastTouchX = event.rawX
+                    frozenLastTouchY = event.rawY
+                    frozenPanGesture = false
                     frozenZoomGesture = false
+                    frozenTapDetector.onTouchEvent(event)
+                }
+
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    if (event.pointerCount >= 2) {
+                        frozenMultiTouchSequence = true
+                        frozenZoomGesture = true
+                        frozenPanGesture = false
+                        frozenNeedsPanRebase = false
+                        frozenPinchStartScale = frozenScale
+                        frozenPinchStartSpan = physicalPointerSpan(event, frozenScale)
+                    }
                 }
 
                 MotionEvent.ACTION_MOVE -> {
-                    val dy = event.y - frozenTouchDownY
-                    if (!frozenZoomGesture && kotlin.math.abs(dy) > touchSlop * 1.25f) {
-                        frozenZoomGesture = true
+                    if (event.pointerCount >= 2 && frozenMultiTouchSequence) {
+                        val span = physicalPointerSpan(event, frozenScale)
+                        val ratio = responsivePinchRatio(span, frozenPinchStartSpan)
+                        val target = (frozenPinchStartScale * ratio).coerceIn(1f, 8f)
+
+                        if (kotlin.math.abs(target - frozenScale) > 0.002f) {
+                            frozenScale = target
+                            applyFrozenScale()
+                            binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}×"
+                        }
+                        return@setOnTouchListener true
                     }
 
-                    if (frozenZoomGesture) {
-                        val height = max(binding.frozenImage.height.toFloat(), 1f)
-                        val verticalTravel = (frozenTouchDownY - event.y) / (height * 0.16f)
-                        frozenScale = (frozenStartScale * exp(verticalTravel.toDouble()).toFloat())
-                            .coerceIn(1f, 8f)
-                        applyFrozenScale()
-                        binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}×"
+                    if (event.pointerCount == 1) {
+                        if (!frozenMultiTouchSequence) {
+                            frozenTapDetector.onTouchEvent(event)
+                        }
+
+                        if (frozenNeedsPanRebase) {
+                            frozenLastTouchX = event.rawX
+                            frozenLastTouchY = event.rawY
+                            frozenNeedsPanRebase = false
+                            return@setOnTouchListener true
+                        }
+
+                        val dx = event.rawX - frozenLastTouchX
+                        val dy = event.rawY - frozenLastTouchY
+                        val movement = hypot(dx.toDouble(), dy.toDouble()).toFloat()
+
+                        if (!frozenPanGesture && movement > touchSlop * 0.35f) {
+                            frozenPanGesture = true
+                        }
+
+                        if (frozenPanGesture && frozenScale > 1.01f && !frozenMultiTouchSequence) {
+                            binding.frozenImage.panBy(dx, dy)
+                            binding.navigatorView.showTemporarily()
+                            binding.statusText.text = "Drag to move • pinch to zoom"
+                        }
+
+                        frozenLastTouchX = event.rawX
+                        frozenLastTouchY = event.rawY
+                    }
+                }
+
+                MotionEvent.ACTION_POINTER_UP -> {
+                    // One finger remains after a two-finger pinch. Re-baseline before
+                    // allowing a pan so there is never a jump from one finger to the other.
+                    if (event.pointerCount <= 2) {
+                        frozenZoomGesture = false
+                        frozenNeedsPanRebase = true
                     }
                 }
 
                 MotionEvent.ACTION_UP -> {
-                    if (frozenZoomGesture) {
+                    if (!frozenMultiTouchSequence) {
+                        frozenTapDetector.onTouchEvent(event)
+                    }
+                    if (frozenPanGesture) {
+                        binding.navigatorView.showTemporarily()
+                    }
+                    if (frozenMultiTouchSequence) {
                         binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}×"
                     }
+                    frozenPanGesture = false
                     frozenZoomGesture = false
+                    frozenMultiTouchSequence = false
+                    frozenNeedsPanRebase = false
+                    frozenPinchStartSpan = 0f
                 }
 
                 MotionEvent.ACTION_CANCEL -> {
+                    frozenPanGesture = false
                     frozenZoomGesture = false
+                    frozenMultiTouchSequence = false
+                    frozenNeedsPanRebase = false
+                    frozenPinchStartSpan = 0f
                 }
             }
             true
@@ -391,8 +567,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun resetFrozenZoom() {
         frozenScale = 1f
-        frozenStartScale = 1f
         frozenZoomGesture = false
+        frozenPanGesture = false
         binding.frozenImage.scaleX = 1f
         binding.frozenImage.scaleY = 1f
         binding.frozenImage.translationX = 0f
@@ -432,12 +608,14 @@ class MainActivity : AppCompatActivity() {
                     stillCapture
                 )
                 setupCameraControls()
+                updateSelfieScreenBrightness()
                 binding.statusText.text = if (isFrontCamera()) {
                     "Selfie camera ready"
                 } else {
                     "Camera ready"
                 }
             } catch (_: Throwable) {
+                restoreSystemScreenBrightness()
                 binding.cameraFlipButton.isEnabled = false
                 binding.selfieLightFrame.visibility = View.GONE
                 binding.statusText.text = "Could not start camera"
@@ -457,7 +635,11 @@ class MainActivity : AppCompatActivity() {
     private fun flipCamera() {
         if (binding.frozenImage.visibility == View.VISIBLE || !cameraFlipAvailable) return
 
-        camera?.cameraControl?.enableTorch(false)
+        if (isFrontCamera()) {
+            setSelfieAssistTorch(false, quiet = true)
+        } else {
+            camera?.cameraControl?.enableTorch(false)
+        }
         torchEnabled = false
         cameraFacing = if (isFrontCamera()) {
             CameraSelector.LENS_FACING_BACK
@@ -487,14 +669,32 @@ class MainActivity : AppCompatActivity() {
         }
 
         val hasLight = c.cameraInfo.hasFlashUnit()
-        binding.lightButton.isEnabled = hasLight && !frozen
-        binding.lightButton.text = when {
-            !hasLight -> "No Light"
-            torchEnabled -> "Light On"
-            else -> "Light"
-        }
-        if (hasLight && torchEnabled) {
-            c.cameraControl.enableTorch(true)
+        if (isFrontCamera()) {
+            selfieAssistCameraId = findRearTorchCameraId()
+            val assistAvailable = selfieAssistCameraId != null
+            binding.lightButton.isEnabled = assistAvailable && !frozen
+            binding.lightButton.contentDescription = if (torchEnabled) {
+                "Turn off selfie light assist"
+            } else {
+                "Turn on selfie light assist"
+            }
+            binding.lightButton.text = when {
+                !assistAvailable -> "No Assist"
+                torchEnabled -> "Assist On"
+                else -> "Assist"
+            }
+        } else {
+            selfieAssistCameraId = null
+            binding.lightButton.isEnabled = hasLight && !frozen
+            binding.lightButton.contentDescription = if (torchEnabled) "Turn off light" else "Turn on light"
+            binding.lightButton.text = when {
+                !hasLight -> "No Light"
+                torchEnabled -> "Light On"
+                else -> "Light"
+            }
+            if (hasLight && torchEnabled) {
+                c.cameraControl.enableTorch(true)
+            }
         }
         updateSelfieFillLight()
 
@@ -528,6 +728,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toggleTorch() {
+        if (isFrontCamera()) {
+            toggleSelfieLightAssist()
+            return
+        }
+
         val c = camera ?: return
         if (!c.cameraInfo.hasFlashUnit()) {
             binding.lightButton.isEnabled = false
@@ -554,6 +759,85 @@ class MainActivity : AppCompatActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
+    private fun toggleSelfieLightAssist() {
+        if (selfieAssistCameraId == null) {
+            binding.lightButton.isEnabled = false
+            binding.statusText.text = "Rear light assist is not available on this device"
+            return
+        }
+
+        setSelfieAssistTorch(!torchEnabled)
+    }
+
+    private fun setSelfieAssistTorch(enabled: Boolean, quiet: Boolean = false) {
+        val id = selfieAssistCameraId ?: findRearTorchCameraId() ?: run {
+            torchEnabled = false
+            if (!quiet) binding.statusText.text = "Rear light assist is not available on this device"
+            return
+        }
+
+        try {
+            val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            manager.setTorchMode(id, enabled)
+            torchEnabled = enabled
+            binding.lightButton.text = if (enabled) "Assist On" else "Assist"
+            binding.lightButton.contentDescription = if (enabled) {
+                "Turn off selfie light assist"
+            } else {
+                "Turn on selfie light assist"
+            }
+            if (!quiet) {
+                binding.statusText.text = if (enabled) {
+                    "Selfie light assist on • using rear LED bounce"
+                } else {
+                    "Selfie light assist off"
+                }
+            }
+        } catch (_: Throwable) {
+            torchEnabled = false
+            binding.lightButton.text = "Assist"
+            if (!quiet) {
+                binding.statusText.text = "This phone cannot use the rear LED with the selfie camera"
+            }
+        } finally {
+            updateSelfieFillLight()
+        }
+    }
+
+    private fun findRearTorchCameraId(): String? {
+        return try {
+            val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            manager.cameraIdList.firstOrNull { id ->
+                val characteristics = manager.getCameraCharacteristics(id)
+                characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK &&
+                    characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun updateSelfieScreenBrightness() {
+        if (!isFrontCamera()) {
+            restoreSystemScreenBrightness()
+            return
+        }
+
+        val systemBrightness = runCatching {
+            Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128) / 255f
+        }.getOrDefault(0.5f)
+        val boosted = (systemBrightness + 0.18f).coerceIn(0f, 1f)
+        window.attributes = window.attributes.apply {
+            screenBrightness = boosted
+        }
+    }
+
+    private fun restoreSystemScreenBrightness() {
+        window.attributes = window.attributes.apply {
+            screenBrightness = -1f
+        }
+    }
+
     private fun setExposureCompensation(requestedIndex: Int) {
         val c = camera ?: return
         val state = c.cameraInfo.exposureState
@@ -571,7 +855,7 @@ class MainActivity : AppCompatActivity() {
         binding.exposureText.text = String.format(Locale.US, "EV %+.1f", ev)
     }
 
-    private fun liveHint(): String = "Slide up/down to zoom • Tap focus • Hold to freeze"
+    private fun liveHint(): String = "Pinch to zoom • Tap focus • Hold to freeze"
 
     private fun handleLiveTouch(event: MotionEvent): Boolean {
         if (binding.frozenImage.visibility == View.VISIBLE) return true
@@ -581,6 +865,8 @@ class MainActivity : AppCompatActivity() {
                 touchDownX = event.x
                 touchDownY = event.y
                 touchStartZoom = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: 1f
+                livePinchStartSpan = 0f
+                livePinchStartZoom = touchStartZoom
                 zoomGesture = false
                 longPressTriggered = false
                 binding.focusRing.animate().cancel()
@@ -590,24 +876,37 @@ class MainActivity : AppCompatActivity() {
                 mainHandler.postDelayed(longPressRunnable, ViewConfiguration.getLongPressTimeout().toLong())
             }
 
-            MotionEvent.ACTION_MOVE -> {
-                val dx = event.x - touchDownX
-                val dy = event.y - touchDownY
-                if (!zoomGesture && hypot(dx.toDouble(), dy.toDouble()) > touchSlop * 1.25) {
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                if (event.pointerCount >= 2) {
                     zoomGesture = true
                     mainHandler.removeCallbacks(longPressRunnable)
+                    livePinchStartSpan = physicalPointerSpan(event)
+                    livePinchStartZoom = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: touchStartZoom
                 }
+            }
 
-                if (zoomGesture) {
+            MotionEvent.ACTION_MOVE -> {
+                if (event.pointerCount >= 2 && zoomGesture) {
+                    mainHandler.removeCallbacks(longPressRunnable)
                     val c = camera ?: return true
                     val state = c.cameraInfo.zoomState.value ?: return true
-                    val height = max(binding.previewView.height.toFloat(), 1f)
-                    val verticalTravel = (touchDownY - event.y) / (height * 0.22f)
-                    val target = (touchStartZoom * exp(verticalTravel.toDouble()).toFloat())
+                    val span = physicalPointerSpan(event)
+                    val ratio = responsivePinchRatio(span, livePinchStartSpan)
+                    val target = (livePinchStartZoom * ratio)
                         .coerceIn(state.minZoomRatio, state.maxZoomRatio)
                     c.cameraControl.setZoomRatio(target)
                     binding.statusText.text = "Zoom ${formatZoom(target)}×"
+                } else if (event.pointerCount == 1) {
+                    val dx = event.x - touchDownX
+                    val dy = event.y - touchDownY
+                    if (hypot(dx.toDouble(), dy.toDouble()) > touchSlop * 1.25) {
+                        mainHandler.removeCallbacks(longPressRunnable)
+                    }
                 }
+            }
+
+            MotionEvent.ACTION_POINTER_UP -> {
+                mainHandler.removeCallbacks(longPressRunnable)
             }
 
             MotionEvent.ACTION_UP -> {
@@ -616,22 +915,22 @@ class MainActivity : AppCompatActivity() {
                 val dy = event.y - touchDownY
                 val movement = hypot(dx.toDouble(), dy.toDouble())
 
-                if (!longPressTriggered) {
-                    if (!zoomGesture && movement <= touchSlop * 1.5) {
-                        focusAt(event.x, event.y)
-                    } else if (zoomGesture) {
-                        val ratio = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: touchStartZoom
-                        binding.statusText.text = "Zoom ${formatZoom(ratio)}×"
-                    }
+                if (!longPressTriggered && !zoomGesture && movement <= touchSlop * 1.5) {
+                    focusAt(event.x, event.y)
+                } else if (zoomGesture) {
+                    val ratio = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: livePinchStartZoom
+                    binding.statusText.text = "Zoom ${formatZoom(ratio)}×"
                 }
                 zoomGesture = false
                 longPressTriggered = false
+                livePinchStartSpan = 0f
             }
 
             MotionEvent.ACTION_CANCEL -> {
                 mainHandler.removeCallbacks(longPressRunnable)
                 zoomGesture = false
                 longPressTriggered = false
+                livePinchStartSpan = 0f
             }
         }
         return true
@@ -725,6 +1024,7 @@ class MainActivity : AppCompatActivity() {
 
         val sessionId = ++freezeSessionId
         original = scaleForSpeed(shot)
+        scanFrozenBarcode(original)
         enhanced = null
         showingEnhanced = false
         resetAreaEnhanceHistory()
@@ -788,6 +1088,7 @@ class MainActivity : AppCompatActivity() {
 
                             val displayEnhanced = showingEnhanced
                             original = preparedSource
+                            scanFrozenBarcode(preparedSource)
                             enhanced = qualityEnhanced
                             resetAreaEnhanceHistory()
                             showingEnhanced = displayEnhanced
@@ -815,6 +1116,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun resumeLive() {
+        if (::barcodePresenter.isInitialized) barcodePresenter.dismiss()
         freezeSessionId++
         enhanceRequestId++
         original = null
@@ -836,6 +1138,7 @@ class MainActivity : AppCompatActivity() {
         binding.readTextButton.isEnabled = false
         binding.saveButton.isEnabled = false
         setupCameraControls()
+        updateSelfieScreenBrightness()
         binding.statusText.text = if (isFrontCamera()) "Selfie camera ready" else "Camera ready"
     }
 
@@ -1091,6 +1394,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(longPressRunnable)
+        if (::barcodePresenter.isInitialized) barcodePresenter.dismiss()
+        if (::barcodeScanner.isInitialized) barcodeScanner.close()
+        if (isFrontCamera() && torchEnabled) {
+            setSelfieAssistTorch(false, quiet = true)
+        }
+        restoreSystemScreenBrightness()
         mainHandler.removeCallbacks(longPressRunnable)
         if (::ocrController.isInitialized) ocrController.close()
         if (::highResCaptureController.isInitialized) highResCaptureController.close()

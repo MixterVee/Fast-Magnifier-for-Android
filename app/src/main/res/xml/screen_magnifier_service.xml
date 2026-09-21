@@ -4,6 +4,7 @@
     android:accessibilityFeedbackType="feedbackVisual"
     android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews|flagRequestEnhancedWebAccessibility"
     android:canControlMagnification="true"
+    android:canPerformGestures="true"
     android:canRetrieveWindowContent="true"
     android:canTakeScreenshot="true"
     android:description="@string/screen_magnifier_service_description"

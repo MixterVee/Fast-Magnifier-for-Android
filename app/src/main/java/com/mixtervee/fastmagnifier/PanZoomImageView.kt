@@ -128,6 +128,18 @@ class PanZoomImageView @JvmOverloads constructor(
         notifyNavigator()
     }
 
+    fun panBy(dx: Float, dy: Float) {
+        if (width <= 0 || height <= 0 || scaleX <= 1.01f || scaleY <= 1.01f) return
+
+        translationX = (translationX + dx).coerceIn(-maxPanX(), maxPanX())
+        translationY = (translationY + dy).coerceIn(-maxPanY(), maxPanY())
+
+        val visible = visibleBitmapRectNormalized()
+        desiredCenterX = visible.centerX().coerceIn(0f, 1f)
+        desiredCenterY = visible.centerY().coerceIn(0f, 1f)
+        notifyNavigator()
+    }
+
     fun visibleBitmapRectNormalized(): RectF {
         if (width <= 0 || height <= 0) return RectF(0f, 0f, 1f, 1f)
 
