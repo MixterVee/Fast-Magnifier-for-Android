@@ -113,7 +113,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val requestCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startCamera() else binding.statusText.text = "Camera permission is required"
+        if (granted) startCamera() else binding.statusText.text = getString(R.string.camera_permission_required)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -138,7 +138,7 @@ class MainActivity : AppCompatActivity() {
             }
         )
         binding.navigatorView.setManualShowDuration(appSettings.overviewDurationMs)
-        barcodeScanner = BarcodeScannerController()
+        barcodeScanner = BarcodeScannerController(this)
         barcodePresenter = CameraCodePresenter(this, binding.root, R.id.statusText)
 
         setupFrozenTapDetector()
@@ -238,13 +238,13 @@ class MainActivity : AppCompatActivity() {
                     val target = (current * detector.scaleFactor)
                         .coerceIn(state.minZoomRatio, state.maxZoomRatio)
                     c.cameraControl.setZoomRatio(target)
-                    binding.statusText.text = "Zoom ${formatZoom(target)}×"
+                    binding.statusText.text = getString(R.string.zoom_value, formatZoom(target))
                     return true
                 }
 
                 override fun onScaleEnd(detector: ScaleGestureDetector) {
                     val ratio = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: return
-                    binding.statusText.text = "Zoom ${formatZoom(ratio)}×"
+                    binding.statusText.text = getString(R.string.zoom_value, formatZoom(ratio))
                 }
             }
         )
@@ -265,13 +265,13 @@ class MainActivity : AppCompatActivity() {
                     frozenScale = (frozenScale * detector.scaleFactor).coerceIn(1f, 8f)
                     if (kotlin.math.abs(frozenScale - previous) > 0.0005f) {
                         applyFrozenScale()
-                        binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}×"
+                        binding.statusText.text = getString(R.string.frozen_zoom_value, formatZoom(frozenScale))
                     }
                     return true
                 }
 
                 override fun onScaleEnd(detector: ScaleGestureDetector) {
-                    binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}×"
+                    binding.statusText.text = getString(R.string.frozen_zoom_value, formatZoom(frozenScale))
                     frozenZoomGesture = false
                 }
             }
@@ -311,7 +311,7 @@ class MainActivity : AppCompatActivity() {
                         if (kotlin.math.abs(target - frozenScale) > 0.002f) {
                             frozenScale = target
                             applyFrozenScale()
-                            binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}×"
+                            binding.statusText.text = getString(R.string.frozen_zoom_value, formatZoom(frozenScale))
                         }
                         return@setOnTouchListener true
                     }
@@ -339,7 +339,7 @@ class MainActivity : AppCompatActivity() {
                         if (frozenPanGesture && frozenScale > 1.01f && !frozenMultiTouchSequence) {
                             binding.frozenImage.panBy(dx, dy)
                             binding.navigatorView.showTemporarily()
-                            binding.statusText.text = "Drag to move • pinch to zoom"
+                            binding.statusText.text = getString(R.string.frozen_image_status)
                         }
 
                         frozenLastTouchX = event.rawX
@@ -364,7 +364,7 @@ class MainActivity : AppCompatActivity() {
                         binding.navigatorView.showTemporarily()
                     }
                     if (frozenMultiTouchSequence) {
-                        binding.statusText.text = "Frozen zoom ${formatZoom(frozenScale)}×"
+                        binding.statusText.text = getString(R.string.frozen_zoom_value, formatZoom(frozenScale))
                     }
                     frozenPanGesture = false
                     frozenZoomGesture = false
@@ -390,7 +390,7 @@ class MainActivity : AppCompatActivity() {
 
         if (frozenScale > 1.01f) {
             binding.navigatorView.showForManualTap()
-            binding.statusText.text = "Overview shown"
+            binding.statusText.text = getString(R.string.overview_shown)
         } else {
             binding.navigatorView.hideImmediately()
             binding.fullViewButton.performClick()
@@ -401,18 +401,18 @@ class MainActivity : AppCompatActivity() {
         if (binding.frozenImage.visibility != View.VISIBLE || frozenScale <= 1.01f) return
 
         if (areaEnhanceInProgress) {
-            binding.statusText.text = "Area enhancement is already running…"
+            binding.statusText.text = getString(R.string.area_enhancement_running)
             return
         }
 
         if (areaEnhancePasses >= MAX_AREA_ENHANCE_PASSES) {
-            binding.statusText.text = "Maximum $MAX_AREA_ENHANCE_PASSES area enhancements reached"
+            binding.statusText.text = getString(R.string.area_enhancement_max, MAX_AREA_ENHANCE_PASSES)
             return
         }
 
         val source = enhanced
         if (source == null) {
-            binding.statusText.text = "Wait for the first enhancement to finish"
+            binding.statusText.text = getString(R.string.wait_first_enhancement)
             return
         }
 
@@ -425,7 +425,7 @@ class MainActivity : AppCompatActivity() {
         val cropHeight = bottom - top
 
         if (cropWidth < 8 || cropHeight < 8) {
-            binding.statusText.text = "Zoomed area is too small to enhance"
+            binding.statusText.text = getString(R.string.zoom_area_too_small)
             return
         }
 
@@ -442,7 +442,7 @@ class MainActivity : AppCompatActivity() {
         binding.readTextButton.isEnabled = false
         binding.saveButton.isEnabled = false
         binding.statusText.text =
-            "Enhancing visible area… pass ${areaEnhancePasses + 1}/$MAX_AREA_ENHANCE_PASSES"
+            getString(R.string.enhancing_visible_area, areaEnhancePasses + 1, MAX_AREA_ENHANCE_PASSES)
         val start = System.nanoTime()
 
         worker.execute {
@@ -475,9 +475,9 @@ class MainActivity : AppCompatActivity() {
                     binding.saveButton.isEnabled = true
 
                     binding.statusText.text = if (areaEnhancePasses >= MAX_AREA_ENHANCE_PASSES) {
-                        "Area enhanced in ${ms} ms • $areaEnhancePasses/$MAX_AREA_ENHANCE_PASSES max reached"
+                        getString(R.string.area_enhanced_max, ms, areaEnhancePasses, MAX_AREA_ENHANCE_PASSES)
                     } else {
-                        "Area enhanced in ${ms} ms • $areaEnhancePasses/$MAX_AREA_ENHANCE_PASSES"
+                        getString(R.string.area_enhanced, ms, areaEnhancePasses, MAX_AREA_ENHANCE_PASSES)
                     }
                 }
             } catch (t: Throwable) {
@@ -488,7 +488,7 @@ class MainActivity : AppCompatActivity() {
                     binding.undoButton.isEnabled = areaUndoHistory.isNotEmpty()
                     binding.readTextButton.isEnabled = !ocrInProgress && binding.frozenImage.visibility == View.VISIBLE
                     binding.saveButton.isEnabled = true
-                    binding.statusText.text = "Area enhance error: ${t.javaClass.simpleName}"
+                    binding.statusText.text = getString(R.string.area_enhance_error, t.javaClass.simpleName)
                 }
             }
         }
@@ -496,20 +496,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun undoAreaEnhance() {
         if (areaEnhanceInProgress) {
-            binding.statusText.text = "Wait for area enhancement to finish"
+            binding.statusText.text = getString(R.string.wait_area_enhancement)
             return
         }
 
         if (areaUndoHistory.isEmpty()) {
             binding.undoButton.isEnabled = false
-            binding.statusText.text = "Nothing to undo"
+            binding.statusText.text = getString(R.string.nothing_to_undo)
             return
         }
 
         val current = enhanced
         if (current == null) {
             resetAreaEnhanceHistory()
-            binding.statusText.text = "Nothing to undo"
+            binding.statusText.text = getString(R.string.nothing_to_undo)
             return
         }
 
@@ -540,7 +540,7 @@ class MainActivity : AppCompatActivity() {
         binding.statusText.text = if (areaEnhancePasses == 0) {
             "Undone • back to normal enhanced image"
         } else {
-            "Undone • $areaEnhancePasses/$MAX_AREA_ENHANCE_PASSES area enhancements remain"
+            getString(R.string.undone_remaining, areaEnhancePasses, MAX_AREA_ENHANCE_PASSES)
         }
     }
 
@@ -618,7 +618,7 @@ class MainActivity : AppCompatActivity() {
                 restoreSystemScreenBrightness()
                 binding.cameraFlipButton.isEnabled = false
                 binding.selfieLightFrame.visibility = View.GONE
-                binding.statusText.text = "Could not start camera"
+                binding.statusText.text = getString(R.string.could_not_start_camera)
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -650,9 +650,9 @@ class MainActivity : AppCompatActivity() {
         binding.cameraFlipButton.isEnabled = false
         binding.selfieLightFrame.visibility = View.GONE
         binding.statusText.text = if (isFrontCamera()) {
-            "Switching to selfie camera…"
+            getString(R.string.switching_selfie)
         } else {
-            "Switching to rear camera…"
+            getString(R.string.switching_rear)
         }
         startCamera()
     }
@@ -747,9 +747,9 @@ class MainActivity : AppCompatActivity() {
                 future.get()
                 torchEnabled = target
                 binding.lightButton.text = getString(if (torchEnabled) R.string.light_on else R.string.light)
-                binding.statusText.text = if (torchEnabled) "Light on" else "Light off"
+                binding.statusText.text = getString(if (torchEnabled) R.string.light_on else R.string.light_off)
             } catch (_: Throwable) {
-                binding.statusText.text = "Could not change camera light"
+                binding.statusText.text = getString(R.string.could_not_change_light)
             } finally {
                 binding.lightButton.isEnabled = true
                 updateSelfieFillLight()
@@ -760,7 +760,7 @@ class MainActivity : AppCompatActivity() {
     private fun toggleSelfieLightAssist() {
         if (selfieAssistCameraId == null) {
             binding.lightButton.isEnabled = false
-            binding.statusText.text = "Rear light assist is not available on this device"
+            binding.statusText.text = getString(R.string.rear_assist_unavailable)
             return
         }
 
@@ -770,7 +770,7 @@ class MainActivity : AppCompatActivity() {
     private fun setSelfieAssistTorch(enabled: Boolean, quiet: Boolean = false) {
         val id = selfieAssistCameraId ?: findRearTorchCameraId() ?: run {
             torchEnabled = false
-            if (!quiet) binding.statusText.text = "Rear light assist is not available on this device"
+            if (!quiet) binding.statusText.text = getString(R.string.rear_assist_unavailable)
             return
         }
 
@@ -786,16 +786,16 @@ class MainActivity : AppCompatActivity() {
             }
             if (!quiet) {
                 binding.statusText.text = if (enabled) {
-                    "Selfie light assist on • using rear LED bounce"
+                    getString(R.string.selfie_assist_on)
                 } else {
-                    "Selfie light assist off"
+                    getString(R.string.selfie_assist_off)
                 }
             }
         } catch (_: Throwable) {
             torchEnabled = false
             binding.lightButton.text = getString(R.string.assist)
             if (!quiet) {
-                binding.statusText.text = "This phone cannot use the rear LED with the selfie camera"
+                binding.statusText.text = getString(R.string.rear_led_selfie_unsupported)
             }
         } finally {
             updateSelfieFillLight()
@@ -893,7 +893,7 @@ class MainActivity : AppCompatActivity() {
                     val target = (livePinchStartZoom * ratio)
                         .coerceIn(state.minZoomRatio, state.maxZoomRatio)
                     c.cameraControl.setZoomRatio(target)
-                    binding.statusText.text = "Zoom ${formatZoom(target)}×"
+                    binding.statusText.text = getString(R.string.zoom_value, formatZoom(target))
                 } else if (event.pointerCount == 1) {
                     val dx = event.x - touchDownX
                     val dy = event.y - touchDownY
@@ -917,7 +917,7 @@ class MainActivity : AppCompatActivity() {
                     focusAt(event.x, event.y)
                 } else if (zoomGesture) {
                     val ratio = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: livePinchStartZoom
-                    binding.statusText.text = "Zoom ${formatZoom(ratio)}×"
+                    binding.statusText.text = getString(R.string.zoom_value, formatZoom(ratio))
                 }
                 zoomGesture = false
                 longPressTriggered = false
@@ -937,7 +937,7 @@ class MainActivity : AppCompatActivity() {
     private fun focusAt(x: Float, y: Float) {
         val c = camera ?: return
         showFocusRing(x, y)
-        binding.statusText.text = "Focusing…"
+        binding.statusText.text = getString(R.string.focusing)
 
         val point = binding.previewView.meteringPointFactory.createPoint(x, y, 0.15f)
         val action = FocusMeteringAction.Builder(point)
@@ -1002,21 +1002,27 @@ class MainActivity : AppCompatActivity() {
             binding.frozenImage.clampPan()
             binding.toggleButton.isEnabled = false
             binding.readTextButton.isEnabled = false
-            binding.statusText.text = "${modeLabel(newMode)} mode • Enhancing…"
+            binding.statusText.text = getString(R.string.mode_enhancing, modeLabel(newMode))
             enhanceFrozen()
         } else {
-            binding.statusText.text = "${modeLabel(newMode)} mode"
+            binding.statusText.text = getString(R.string.mode_status, modeLabel(newMode))
         }
     }
 
-    private fun modeLabel(value: Mode): String = value.name.lowercase().replaceFirstChar { it.uppercase() }
+    private fun modeLabel(value: Mode): String = getString(
+        when (value) {
+            Mode.TEXT -> R.string.text_mode
+            Mode.DETAIL -> R.string.detail_mode
+            Mode.DISTANCE -> R.string.distance_mode
+        }
+    )
 
     private fun freezeAndAutoEnhance() {
         if (binding.frozenImage.visibility == View.VISIBLE) return
         mainHandler.removeCallbacks(longPressRunnable)
 
         val shot = binding.previewView.bitmap ?: run {
-            binding.statusText.text = "Could not capture preview"
+            binding.statusText.text = getString(R.string.could_not_capture_preview)
             return
         }
 
@@ -1043,7 +1049,7 @@ class MainActivity : AppCompatActivity() {
         binding.readTextButton.isEnabled = false
         binding.saveButton.isEnabled = true
         binding.exposureSlider.isEnabled = false
-        binding.statusText.text = "Frozen • Enhancing…"
+        binding.statusText.text = getString(R.string.frozen_enhancing)
         enhanceFrozen()
         captureHighResolutionUpgrade(sessionId)
     }
@@ -1099,7 +1105,7 @@ class MainActivity : AppCompatActivity() {
                             binding.readTextButton.isEnabled = !ocrInProgress
                             binding.saveButton.isEnabled = true
                             if (!ocrInProgress) {
-                                binding.statusText.text = "Hi-Res Picture Taken"
+                                binding.statusText.text = getString(R.string.hi_res_picture_taken)
                             }
                         }
                     } catch (_: Throwable) {
@@ -1165,7 +1171,7 @@ class MainActivity : AppCompatActivity() {
                     binding.toggleButton.text = getString(R.string.original)
                     binding.readTextButton.isEnabled = !ocrInProgress
                     binding.saveButton.isEnabled = true
-                    binding.statusText.text = "Enhanced in ${ms} ms"
+                    binding.statusText.text = getString(R.string.enhanced_in_ms, ms)
                 }
             } catch (t: Throwable) {
                 runOnUiThread {
@@ -1176,7 +1182,7 @@ class MainActivity : AppCompatActivity() {
                     binding.toggleButton.isEnabled = false
                     binding.readTextButton.isEnabled = !ocrInProgress
                     binding.saveButton.isEnabled = true
-                    binding.statusText.text = "Enhance error: ${t.javaClass.simpleName}"
+                    binding.statusText.text = getString(R.string.enhance_error, t.javaClass.simpleName)
                 }
             }
         }
@@ -1188,7 +1194,7 @@ class MainActivity : AppCompatActivity() {
         binding.frozenImage.setImageBitmap(if (showingEnhanced) e else original)
         binding.frozenImage.clampPan()
         binding.toggleButton.text = getString(if (showingEnhanced) R.string.original else R.string.enhanced)
-        binding.statusText.text = if (showingEnhanced) "Enhanced" else "Original"
+        binding.statusText.text = getString(if (showingEnhanced) R.string.enhanced else R.string.original)
     }
 
     private fun readTextFromFrozen() {
@@ -1196,18 +1202,18 @@ class MainActivity : AppCompatActivity() {
 
         val source = if (showingEnhanced) enhanced ?: original else original
         if (source == null) {
-            binding.statusText.text = "Nothing available to read"
+            binding.statusText.text = getString(R.string.nothing_available_to_read)
             return
         }
 
         val zoomed = frozenScale > 1.01f
         val ocrBitmap = if (zoomed) cropVisibleBitmap(source) else source
-        val sourceLabel = if (zoomed) "visible area" else "full image"
+        val sourceLabel = getString(if (zoomed) R.string.visible_area else R.string.full_image)
 
         ocrInProgress = true
         binding.navigatorView.hideImmediately()
         binding.readTextButton.isEnabled = false
-        binding.statusText.text = "Reading text from $sourceLabel…"
+        binding.statusText.text = getString(R.string.reading_text_from, sourceLabel)
 
         ocrController.recognize(ocrBitmap, sourceLabel) {
             ocrInProgress = false
@@ -1229,12 +1235,12 @@ class MainActivity : AppCompatActivity() {
     private fun saveCurrentPicture() {
         val bitmap = if (showingEnhanced) enhanced ?: original else original
         if (bitmap == null) {
-            binding.statusText.text = "Nothing to save"
+            binding.statusText.text = getString(R.string.nothing_to_save)
             return
         }
 
         binding.saveButton.isEnabled = false
-        binding.statusText.text = "Saving picture…"
+        binding.statusText.text = getString(R.string.saving_picture)
 
         worker.execute {
             try {
@@ -1268,12 +1274,12 @@ class MainActivity : AppCompatActivity() {
 
                 runOnUiThread {
                     binding.saveButton.isEnabled = true
-                    binding.statusText.text = "Saved to Pictures/Fast Magnifier"
+                    binding.statusText.text = getString(R.string.saved_to_pictures)
                 }
             } catch (t: Throwable) {
                 runOnUiThread {
                     binding.saveButton.isEnabled = true
-                    binding.statusText.text = "Save failed: ${t.javaClass.simpleName}"
+                    binding.statusText.text = getString(R.string.save_failed, t.javaClass.simpleName)
                 }
             }
         }
