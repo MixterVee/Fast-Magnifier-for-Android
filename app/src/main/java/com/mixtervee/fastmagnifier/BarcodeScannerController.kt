@@ -1,5 +1,6 @@
 package com.mixtervee.fastmagnifier
 
+import android.content.Context
 import android.graphics.Bitmap
 import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
@@ -8,18 +9,16 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import kotlin.math.max
 
-class BarcodeScannerController {
+class BarcodeScannerController(private val context: Context) {
 
     data class DetectedCode(
         val value: String,
         val formatLabel: String,
+        val title: String,
         val isQr: Boolean,
         val isUrl: Boolean,
         val isProductBarcode: Boolean
-    ) {
-        val title: String
-            get() = if (isQr) "QR code detected" else "$formatLabel detected"
-    }
+    )
 
     private val options = BarcodeScannerOptions.Builder()
         .setBarcodeFormats(
@@ -102,25 +101,32 @@ class BarcodeScannerController {
         return DetectedCode(
             value = value,
             formatLabel = formatLabel(barcode.format),
+            title = if (barcode.format == Barcode.FORMAT_QR_CODE) {
+                context.getString(R.string.qr_code_detected)
+            } else {
+                context.getString(R.string.code_format_detected, formatLabel(barcode.format))
+            },
             isQr = barcode.format == Barcode.FORMAT_QR_CODE,
             isUrl = isUrl,
             isProductBarcode = isProduct
         )
     }
 
-    private fun formatLabel(format: Int): String = when (format) {
-        Barcode.FORMAT_QR_CODE -> "QR code"
-        Barcode.FORMAT_UPC_A -> "UPC-A barcode"
-        Barcode.FORMAT_UPC_E -> "UPC-E barcode"
-        Barcode.FORMAT_EAN_8 -> "EAN-8 barcode"
-        Barcode.FORMAT_EAN_13 -> "EAN-13 barcode"
-        Barcode.FORMAT_CODE_39 -> "Code 39 barcode"
-        Barcode.FORMAT_CODE_128 -> "Code 128 barcode"
-        Barcode.FORMAT_DATA_MATRIX -> "Data Matrix code"
-        Barcode.FORMAT_PDF417 -> "PDF417 barcode"
-        Barcode.FORMAT_AZTEC -> "Aztec code"
-        else -> "Barcode"
-    }
+    private fun formatLabel(format: Int): String = context.getString(
+        when (format) {
+            Barcode.FORMAT_QR_CODE -> R.string.format_qr
+            Barcode.FORMAT_UPC_A -> R.string.format_upca
+            Barcode.FORMAT_UPC_E -> R.string.format_upce
+            Barcode.FORMAT_EAN_8 -> R.string.format_ean8
+            Barcode.FORMAT_EAN_13 -> R.string.format_ean13
+            Barcode.FORMAT_CODE_39 -> R.string.format_code39
+            Barcode.FORMAT_CODE_128 -> R.string.format_code128
+            Barcode.FORMAT_DATA_MATRIX -> R.string.format_datamatrix
+            Barcode.FORMAT_PDF417 -> R.string.format_pdf417
+            Barcode.FORMAT_AZTEC -> R.string.format_aztec
+            else -> R.string.format_barcode
+        }
+    )
 
     fun close() {
         closed = true
